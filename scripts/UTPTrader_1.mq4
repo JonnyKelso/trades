@@ -10,14 +10,13 @@
 
 #include <stderror.mqh>
 #include <stdlib.mqh>
-
-string InstrumentsFile="InstrumentsData.csv"; // file name
+#include "Instrument.mqh"
+#include "Trade.mqh"
 
 const int CONST_MAX_PERIOD = 60;
 const int CONST_SMS_PERIOD = 52;
 const int CONST_EWT_PERIOD = 21;
 const int CONST_NUM_SYMBOLS = 17;
-string symbols[]={"GOOG","MSFT","TWTR","YHOO","FACE","EURUSD","EURCHF","GBPUSD","USDJPY","XAUUSD","WTICrude","NaturalGas","USCotton","USSugar",".UK100",".US500","USTNote"};
 string InstrsLogFilename = "UTP_InstrsLog.csv";
 string DebugLogFilename = "UTP_DebugLog.csv";
 string TradeLogFilename = "UTP_TradeLog.csv";
@@ -31,125 +30,32 @@ string point1_date = "";
 string point2_date = "";
 string point3_date = "";
 string point4_date = "";
-struct Instrument
-{
-    string symbol;
-    string base_currency_chart;
-    double min_trade_size;
-    double lot_size;
-    double pip_location;
-    int lsms_trade;
-    int lewt_trade;
-    int sewt_trade;
-    int ssms_trade;
-    
-    string AsString()
-    {
-        string str = StringFormat("%s,%s,%f,%f,%f,%d,%d,%d,%d,\n",
-                    symbol,
-                    base_currency_chart,
-                    min_trade_size,
-                    lot_size,
-                    pip_location,
-                    lsms_trade,
-                    lewt_trade,
-                    sewt_trade,
-                    ssms_trade);
-        return str;   
-    }
-    void Clear()
-    {
-        symbol = "";
-        base_currency_chart = "";
-        min_trade_size = 0;
-        lot_size = 0;
-        pip_location = 0;
-        lsms_trade = 0;
-        lewt_trade = 0;
-        sewt_trade = 0;
-        ssms_trade = 0;
-    }
-};
 Instrument Instrs[17];
-
-enum TradeType
-{
-    INVALID = 0x0,
-    LSMS    = 0x1,
-    LEWT    = 0x2,
-    SEWT    = 0x4,
-    SSMS    = 0x8
-};
-
-struct Trade
-{
-    int ticket_number;
-    string symbol;
-    double price;
-    double volume;
-    double stoploss;
-    double take_profit;
-    string comment;
-    TradeType trade_type;
-    
-    
-    string AsString()
-    {
-        string ttype = "";
-        if(trade_type == LSMS){ttype = "LSMS";}
-        if(trade_type == LEWT){ttype = "LEWT";}
-        if(trade_type == SEWT){ttype = "SEWT";}
-        if(trade_type == SSMS){ttype = "SSMS";}
-
-        string str = StringFormat("%d,%s,%f,%f,%f,%f,%s,%s\n",
-                    ticket_number,
-                    symbol,
-                    price,
-                    volume,
-                    stoploss,
-                    take_profit,
-                    comment,
-                    ttype);
-        return str;   
-    }
-    void Clear()
-    {
-        ticket_number = 0;
-        symbol = "";
-        price = 0;
-        volume = 0;
-        stoploss = 0;
-        take_profit = 0;
-        comment = "";
-        trade_type = INVALID; 
-
-    }
-};
 
 
 //                   Symbol 	    Base        Minimum Lot  	Pip         trade
 //                                  Currency    Trade   Size    Location    tickets
 //                                  Chart       Size
-Instrument instr01={"EURUSD",	    "GBPUSD",   0.01,	100000,	0.0001,     0,0,0,0};      //USD
-Instrument instr02={"GBPUSD",	    "GBPUSD",   0.01,	100000,	0.0001,     0,0,0,0};      //USD
-Instrument instr03={"EURCHF",	    "GBPCHF",   0.01,	100000,	0.0001,     0,0,0,0};      //CHF
-Instrument instr04={"USDJPY",       "GBPJPY",   0.01,	100000,	0.01,       0,0,0,0};        //JPY
-Instrument instr05={".UK100",	    "GBP",      0.01,	1,	    1,          0,0,0,0};           //GBP
-Instrument instr06={".US500",	    "GBPUSD",   0.01,	1,	    1,          0,0,0,0};           //USD
-Instrument instr07={"XAUUSD",	    "GBPUSD",   0.01,	100,    0.01,       0,0,0,0};        //USD
-Instrument instr08={"USCotton",	    "GBPUSD",   0.01,	10000,	0.01,       0,0,0,0};        //USD
-Instrument instr09={"USSugar",	    "GBPUSD",   0.01,	10000,	0.01,       0,0,0,0};        //USD
-Instrument instr10={"WTICrude",	    "GBPUSD",   0.01,	100,    0.01,       0,0,0,0};        //USD
-Instrument instr11={"NaturalGas",	"GBPUSD",   0.01,	1000,	0.001,      0,0,0,0};       //USD
-Instrument instr12={"FACE",	        "GBPUSD",   1,	    1,	    0.01,       0,0,0,0};        //USD
-Instrument instr13={"GOOG",	        "GBPUSD",   1,	    1,  	0.01,       0,0,0,0};        //USD
-Instrument instr14={"MSFT",	        "GBPUSD",   1,	    1,	    0.01,       0,0,0,0};        //USD
-Instrument instr15={"TWTR",	        "GBPUSD",   1,	    1,	    0.01,       0,0,0,0};        //USD
-Instrument instr16={"USTNote",	    "GBPUSD",   1,	    100,    0.01,       0,0,0,0};        //USD
-Instrument instr17={"YHOO",	        "GBPUSD",   1,	    1,	    0.01,       0,0,0,0};        //USD
+Instrument instr01("EURUSD",	    "GBPUSD",   0.01,	100000,	0.0001,     0,0,0,0);      //USD
+Instrument instr02("GBPUSD",	    "GBPUSD",   0.01,	100000,	0.0001,     0,0,0,0);      //USD
+Instrument instr03("EURCHF",	    "GBPCHF",   0.01,	100000,	0.0001,     0,0,0,0);      //CHF
+Instrument instr04("USDJPY",       "GBPJPY",   0.01,	100000,	0.01,       0,0,0,0);        //JPY
+Instrument instr05(".UK100",	    "GBP",      0.01,	1,	    1,          0,0,0,0);           //GBP
+Instrument instr06(".US500",	    "GBPUSD",   0.01,	1,	    1,          0,0,0,0);           //USD
+Instrument instr07("XAUUSD",	    "GBPUSD",   0.01,	100,    0.01,       0,0,0,0);        //USD
+Instrument instr08("USCotton",	    "GBPUSD",   0.01,	10000,	0.01,       0,0,0,0);        //USD
+Instrument instr09("USSugar",	    "GBPUSD",   0.01,	10000,	0.01,       0,0,0,0);        //USD
+Instrument instr10("WTICrude",	    "GBPUSD",   0.01,	100,    0.01,       0,0,0,0);        //USD
+Instrument instr11("NaturalGas",	"GBPUSD",   0.01,	1000,	0.001,      0,0,0,0);       //USD
+Instrument instr12("FACE",	        "GBPUSD",   1,	    1,	    0.01,       0,0,0,0);        //USD
+Instrument instr13("GOOG",	        "GBPUSD",   1,	    1,  	0.01,       0,0,0,0);        //USD
+Instrument instr14("MSFT",	        "GBPUSD",   1,	    1,	    0.01,       0,0,0,0);        //USD
+Instrument instr15("TWTR",	        "GBPUSD",   1,	    1,	    0.01,       0,0,0,0);        //USD
+Instrument instr16("USTNote",	    "GBPUSD",   1,	    100,    0.01,       0,0,0,0);        //USD
+Instrument instr17("YHOO",	        "GBPUSD",   1,	    1,	    0.01,       0,0,0,0);        //USD
 
 
-
+//+--------------------------------------------------------------------------------------------------------------------+
 void PrintMsg(int hndl,string msg)
 {
     if(hndl > -1)
@@ -158,7 +64,7 @@ void PrintMsg(int hndl,string msg)
         FileWriteString(hndl,msg,256);    
     }
 }
-
+//+--------------------------------------------------------------------------------------------------------------------+
 void BuildInstrumentList()
 {    
     PrintMsg(DebugLogHandle,"BuildInstrumentList called");
@@ -184,6 +90,7 @@ void BuildInstrumentList()
     PrintMsg(DebugLogHandle,"BuildInstrumentList returned");
 
 }
+//+--------------------------------------------------------------------------------------------------------------------+
 void InstrumentCopy(Instrument &a, Instrument &b)
 {
     a.symbol = b.symbol;
@@ -192,7 +99,7 @@ void InstrumentCopy(Instrument &a, Instrument &b)
     a.lot_size = b.lot_size;
     a.pip_location = b.pip_location;
 }
-
+//+--------------------------------------------------------------------------------------------------------------------+
 int ReadInstrsLog()
 {
     PrintMsg(DebugLogHandle,"ReadInstrsLog called");
@@ -239,6 +146,7 @@ int ReadInstrsLog()
     PrintMsg(DebugLogHandle,"ReadInstrsLog returned");
     return 0;
 }
+//+--------------------------------------------------------------------------------------------------------------------+
 int WriteInstrsLog()
 {
     PrintMsg(DebugLogHandle,"WriteInstrsLog called");
@@ -260,6 +168,7 @@ int WriteInstrsLog()
     PrintMsg(DebugLogHandle,"WriteInstrsLog returned");
     return 0;
 }
+//+--------------------------------------------------------------------------------------------------------------------+
 int LogTrade(Trade &trade)
 {
     PrintMsg(DebugLogHandle,StringFormat("LogTrade called with trade = %s",trade.AsString()));
@@ -279,11 +188,7 @@ int LogTrade(Trade &trade)
 
     return 0;
 }
-
-
-
-
-//+------------------------------------------------------------------+
+//+--------------------------------------------------------------------------------------------------------------------+
 int CalculateLTCT(string symbol, bool &profit)
 {
     PrintMsg(DebugLogHandle,StringFormat("CalculateLTCT called with %s",symbol));
@@ -448,8 +353,8 @@ int CalculateLTCT(string symbol, bool &profit)
    
     return 0;
 }
+//+--------------------------------------------------------------------------------------------------------------------+
 int GetEWTIndexFromIndex(string symb, int start_index, int HighLow)
-
 {
     PrintMsg(DebugLogHandle,StringFormat("GetEWTIndexFromIndex called with\n symbol=%s\n start_index=%d\n HighLow=%d",symb,start_index,HighLow));
 
@@ -466,7 +371,7 @@ int GetEWTIndexFromIndex(string symb, int start_index, int HighLow)
 
     return ewt_index;
 }
-
+//+--------------------------------------------------------------------------------------------------------------------+
 double EWTValueAtIndex(string symbol, int start_index, int IsHigh)
 {
     datetime date_time = iTime(symbol,PERIOD_D1,start_index);
@@ -493,6 +398,7 @@ double EWTValueAtIndex(string symbol, int start_index, int IsHigh)
 
     return ewt_value;
 }
+//+--------------------------------------------------------------------------------------------------------------------+
 void CalculateEWTValues(string symbol)
 {
     PrintMsg(DebugLogHandle,StringFormat("CalculateEWTValues called with symbol %s",symbol));
@@ -527,6 +433,7 @@ void CalculateEWTValues(string symbol)
     PrintMsg(DebugLogHandle,"CalculateEWTValues returned");
 
 }
+//+--------------------------------------------------------------------------------------------------------------------+
 void MostRecentEWTTouches(string symbol, int start_index, int& lewt_index, int& sewt_index)
 {
     PrintMsg(DebugLogHandle,StringFormat("MostRecentEWTTouches called with\n symbol=%s\n start_index=%d\n lewt_index=%d, sewt_index=%d",symbol,start_index,lewt_index,sewt_index));
@@ -578,6 +485,7 @@ void MostRecentEWTTouches(string symbol, int start_index, int& lewt_index, int& 
     PrintMsg(DebugLogHandle,StringFormat("MostRecentEWTTouches returned with\n lewt_index=%d, sewt_index=%d",lewt_index,sewt_index));
 
 }
+//+--------------------------------------------------------------------------------------------------------------------+
 void NextEWTTouchesForward(string symbol, int start_index, int& lewt_index, int& sewt_index)
 {
     PrintMsg(DebugLogHandle,StringFormat("NextEWTTouchesForward called with\n symbol=%s\n start_index=%d\n lewt_index=%d, sewt_index=%d",symbol,start_index,lewt_index,sewt_index));
@@ -631,6 +539,7 @@ void NextEWTTouchesForward(string symbol, int start_index, int& lewt_index, int&
     PrintMsg(DebugLogHandle,StringFormat("NextEWTTouchesForward returned with\n lewt_index=%d, sewt_index=%d",lewt_index,sewt_index));
 
 }
+//+--------------------------------------------------------------------------------------------------------------------+
 int FindIndexOfDirectionChangefromIndex(string symbol, int index, int IsHigh)
 {
     datetime date_time = iTime(symbol,PERIOD_D1,index);
@@ -658,7 +567,7 @@ int FindIndexOfDirectionChangefromIndex(string symbol, int index, int IsHigh)
             current_index++;
             prev_val = val;
             val = EWTValueAtIndex(symbol,current_index,IsHigh);
-            PrintMsg(DebugLogHandle,StringFormat("Traversing back through value %f at index %d, (prev=%f)",val,current_index,prev_val));
+            PrintMsg(DebugLogHandle,StringFormat("Is High = true, Traversing back through value %f at index %d, (prev=%f)",val,current_index,prev_val));
             if (val > prev_val)
             {
                 PrintMsg(DebugLogHandle,"Trend on high is downwards");
@@ -736,7 +645,7 @@ int FindIndexOfDirectionChangefromIndex(string symbol, int index, int IsHigh)
             current_index++;
             prev_val = val;
             val = EWTValueAtIndex(symbol,current_index,IsHigh);
-            PrintMsg(DebugLogHandle,StringFormat("Traversing back through value %f at index %d, (prev=%f)",val,current_index,prev_val));
+            PrintMsg(DebugLogHandle,StringFormat("Is High = false, Traversing back through value %f at index %d, (prev=%f)",val,current_index,prev_val));
             if (val > prev_val)
             {
                 PrintMsg(DebugLogHandle,"Trend on low is downwards");
@@ -798,6 +707,7 @@ int FindIndexOfDirectionChangefromIndex(string symbol, int index, int IsHigh)
     PrintMsg(DebugLogHandle,StringFormat("FindIndexOfDirectionChangefromIndex returned index %f, Date=%d-%d_%d",index_of_change,MN,DD,HH));
     return index_of_change;
 }
+//+--------------------------------------------------------------------------------------------------------------------+
 bool MakePendingOrder(Instrument &inst, int ttype)
 {
     PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder called with\n instrument=%s ttype=%d",inst.AsString(),ttype));
@@ -1044,6 +954,7 @@ bool MakePendingOrder(Instrument &inst, int ttype)
 
     return trade_placed;
 }
+//+--------------------------------------------------------------------------------------------------------------------+
 
 //+------------------------------------------------------------------+
 //| Script program start function                                    |
