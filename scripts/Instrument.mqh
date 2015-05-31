@@ -7,6 +7,8 @@
 #property link      "http://www.mql4.com"
 #property version   "1.00"
 #property strict
+
+#include "Trade.mqh"
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
@@ -20,7 +22,7 @@ public:
       ~Instrument();
       string AsString();
       void Clear();
-                    
+      void Copy(Instrument &other);                    
       string symbol;
       string base_currency_chart;
       double min_trade_size;
@@ -98,5 +100,20 @@ void Instrument::Clear()
    lewt_trade = 0;
    sewt_trade = 0;
    ssms_trade = 0;
+}
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void Instrument::Copy(Instrument &other)
+{
+   symbol               = other.symbol;
+   base_currency_chart  = other.base_currency_chart;
+   min_trade_size       = other.min_trade_size;
+   lot_size             = other.lot_size;
+   pip_location         = other.pip_location;
+   lsms_trade           = other.lsms_trade;
+   lewt_trade           = other.lewt_trade;
+   sewt_trade           = other.sewt_trade;
+   ssms_trade           = other.ssms_trade;
 }
 //+------------------------------------------------------------------+
