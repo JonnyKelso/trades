@@ -30,6 +30,7 @@ public:
       string AsString();
       void Clear();
       void Copy(Trade &other);
+      
       int ticket_number;
       string symbol;
       double price;

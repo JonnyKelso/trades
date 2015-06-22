@@ -1,0 +1,4 @@
+check if current pending orders have filled
+    update pendings order to open
+check if current open orders have closed
+    update open orders to closed
