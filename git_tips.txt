@@ -1,0 +1,4 @@
+To update local repo with changes madeon remote repo:
+$ git pull origin master
+
+
