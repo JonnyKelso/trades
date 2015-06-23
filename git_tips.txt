@@ -1,0 +1,35 @@
+# To commit local changes to remote repo:
+
+# Add changes to index:
+$ git add <filename>
+# or
+$ git add *
+
+# Commit changes to HEAD (local HEAD not remote repo):
+$ git commit -m "Commit message"
+
+# Push local HEAD to remote repo:
+$ git push origin master     # (prompts for username jonnykelso and password speccy)
+
+
+# To update local repo to newest commit:
+$ git pull
+
+
+# Examine the git log:
+$ git log
+
+
+
+# To replace local changes:
+$ git checkout -- <filename>  # this replaces the content in local working tree with contents in local HEAD.
+
+# Git GIU
+$ gitk
+
+# Colourful git output:
+$ git config color.ui true
+
+# Git interactive adding:
+$ git add -i
+
