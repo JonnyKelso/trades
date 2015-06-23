@@ -1126,38 +1126,53 @@ void CheckPlacedTrades()
         if(Instrs[index].lsms_trade > 0)
         {
             int ticket_no = Instrs[index].lsms_trade;
-            for(int trade_index = 0; trade_index < CONST_MAX_NUM_TRADES; trade_index)
+            int trade_index = -1;
+            // get trade info
+            for(trade_index = 0; trade_index < CONST_MAX_NUM_TRADES; trade_index)
             {
                 if(Trades[trade_index].ticket_number == ticket_no)
                 {
-                    Trade temp_trade;
-                    temp_trade.Copy(Trades[trade_index]);
-                    // TODO
-                    
-                    
-                    int openTicket=0, pendTicket=0;
-                    for(int pos = OrdersTotal()-1; pos >= 0 ; pos--) 
-                    {
-                        if (OrderSelect(pos, SELECT_BY_POS)                 // Only my orders w/
-                            //  &&  OrderMagicNumber() == magic.number              // my magic number
-                            &&  OrderSymbol()      == Symbol() )
-                        {               // and symbol
-                            if (OrderType() <= OP_SELL) 
-                            {
-                                openTicket=OrderTicket();
-                            }
-                            else                        
-                            {
-                                pendTicket=OrderTicket();
-                            }
-                        }
-                        if (openTicket != 0 && pendTicket != 0)
-                        {
-                            OrderDelete(pendTicket);
-                        }
-    
+                    // found trade
+                    break;
                 }
             }
+
+            // operate on order, must 'select' it first
+            bool selected = OrderSelect(ticket_no,SELECT_BY_TICKET);
+            if(selected)
+            {
+                // check the trade has the right symbol
+                if(OrderSymbol() == Instrs[index].symbol)
+                {
+                    datetime close_time = OrderCloseTime():
+                    if(close_time == 0)
+                    {
+                        // order is either pending or open
+                        int order_type = OrderType();
+                        if(order_type == OP_BUY || order_type == OP_SELL)
+                        {
+                            // order is open
+                            // TODO
+                        }
+                        else
+                        {
+                            // order is pending
+                        }
+                    }
+                    else
+                    {
+                        //order is closed
+                    }
+                }
+            }
+            else
+            {
+                // order could not be selected
+                PrintMsg()
+            }
+
+
+
             
         }
         if(Instrs[index].lewt_trade > 0)

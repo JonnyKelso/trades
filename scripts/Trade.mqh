@@ -18,6 +18,13 @@ enum TradeType
     SEWT    = 0x4,
     SSMS    = 0x8
 };
+enum TradeState
+{
+    INVALID,
+    PENDING,
+    OPEN,
+    CLOSED
+}
 
 class Trade
 {
@@ -25,7 +32,7 @@ private:
 
 public:
        Trade();
-       Trade(int ticket_num, string symb, double symb_price, double vol, double sloss, double tprofit, string cmmnt, TradeType tType, bool filled);
+       Trade(int ticket_num, string symb, double symb_price, double vol, double sloss, double tprofit, string cmmnt, TradeType tType, bool filled, TradeState state);
       ~Trade();
       string AsString();
       void Clear();
@@ -40,6 +47,7 @@ public:
       string comment;
       TradeType trade_type;
       bool is_filled;
+      TradeState trade_state;
 };
 //+------------------------------------------------------------------+
 //|                                                                  |
@@ -55,11 +63,12 @@ Trade::Trade()
    comment = "";
    trade_type = 0;
    is_filled = false;
+   trade_state = INVALID;
   }
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+  
-Trade::Trade(int ticket_num, string symb, double symb_price, double vol, double sloss, double tprofit, string cmmnt, TradeType tType, bool filled)
+Trade::Trade(int ticket_num, string symb, double symb_price, double vol, double sloss, double tprofit, string cmmnt, TradeType tType, bool filled, TradeState state)
 {
    ticket_number = ticket_num;
    symbol = symb;
@@ -70,6 +79,7 @@ Trade::Trade(int ticket_num, string symb, double symb_price, double vol, double 
    comment = cmmnt;
    trade_type = tType;
    is_filled = filled;
+   trade_state = state;
 }
 //+------------------------------------------------------------------+
 //|                                                                  |
@@ -88,7 +98,13 @@ string Trade::AsString()
    if(trade_type == SEWT){ttype = "SEWT";}
    if(trade_type == SSMS){ttype = "SSMS";}
    
-   string str = StringFormat("%d,%s,%f,%f,%f,%f,%s,%s,%d\n",
+   string state = "";
+   if(trade_state == INVALID){state = "INVALID";}
+   if(trade_state == PENDING){state = "PENDING";}
+   if(trade_state == OPEN){state = "OPEN";}
+   if(trade_state == CLOSED){state = "CLOSED";}
+
+   string str = StringFormat("%d,%s,%f,%f,%f,%f,%s,%s,%d,%s\n",
                   ticket_number,
                   symbol,
                   price,
@@ -97,7 +113,8 @@ string Trade::AsString()
                   take_profit,
                   comment,
                   ttype,
-                  is_filled);
+                  is_filled,
+                  state);
    return str;   
 }
 //+------------------------------------------------------------------+
@@ -114,7 +131,7 @@ void Trade::Clear()
    comment        = "";
    trade_type     = INVALID; 
    is_filled      = false;
-
+   trade_state    = INVALID;
 }
 //+------------------------------------------------------------------+
 //|                                                                  |
@@ -130,5 +147,6 @@ void Trade::Copy(Trade &other)
    comment        = other.comment;
    trade_type     = other.trade_type; 
    is_filled       = other.is_filled;
+   trade_state    = other.trade_state;
 }
 //+------------------------------------------------------------------+
