@@ -48,7 +48,7 @@ Trade Trades[70]; // max number of trades is num_instruments x 4 (lewt,lsms,ssms
 Instrument instr01("EURUSD",       "GBPUSD",   0.01,   100000,   0.0001,     0,0,0,0);       //USD
 Instrument instr02("GBPUSD",       "GBPUSD",   0.01,   100000,   0.0001,     0,0,0,0);       //USD
 Instrument instr03("EURCHF",       "GBPCHF",   0.01,   100000,   0.0001,     0,0,0,0);       //CHF
-Instrument instr04("USDJPY","GBPJPY",0.01,100000,0.01,0,0,0,0);       //JPY
+Instrument instr04("USDJPY",       "GBPJPY",0.01,100000,0.01,0,0,0,0);       //JPY
 Instrument instr05(".UK100",       "GBP",      0.01,   1,         1,          0,0,0,0);       //GBP
 Instrument instr06(".US500",       "GBPUSD",   0.01,   1,         1,          0,0,0,0);       //USD
 Instrument instr07("XAUUSD","GBPUSD",0.01,100,0.01,0,0,0,0);       //USD
@@ -1116,7 +1116,21 @@ double MakeTrade(Instrument &inst,TradeType ttype)
       }
    }
    PrintMsg(DebugLogHandle,StringFormat("MakeTrade returned %s ",(made_trade ? "true" : "false")));
-   return made_price;
+   return made_price; 
+}
+int GetTradeIndexFromTicketNumber(int ticket_num)
+{
+    int trade_index = -1;
+    // get trade info
+    for(trade_index = 0; trade_index < CONST_MAX_NUM_TRADES; trade_index)
+    {
+        if(Trades[trade_index].ticket_number == ticket_no)
+        {
+            // found trade
+            break;
+        }
+    }
+    return trade_index;
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
 void CheckPlacedTrades()
@@ -1126,50 +1140,58 @@ void CheckPlacedTrades()
         if(Instrs[index].lsms_trade > 0)
         {
             int ticket_no = Instrs[index].lsms_trade;
-            int trade_index = -1;
-            // get trade info
-            for(trade_index = 0; trade_index < CONST_MAX_NUM_TRADES; trade_index)
-            {
-                if(Trades[trade_index].ticket_number == ticket_no)
-                {
-                    // found trade
-                    break;
-                }
-            }
+            int trade_index = GetTradeIndexFromTicketNumber(ticket_no);
 
-            // operate on order, must 'select' it first
-            bool selected = OrderSelect(ticket_no,SELECT_BY_TICKET);
-            if(selected)
+            if(trade_index > -1 && Trades[trade_index].state != INVALID)
             {
-                // check the trade has the right symbol
-                if(OrderSymbol() == Instrs[index].symbol)
+                // operate on order, must 'select' it first
+                bool selected = OrderSelect(ticket_no,SELECT_BY_TICKET);
+                if(selected)
                 {
-                    datetime close_time = OrderCloseTime():
-                    if(close_time == 0)
+                    // check the trade has the right symbol
+                    if(OrderSymbol() == Instrs[index].symbol)
                     {
-                        // order is either pending or open
-                        int order_type = OrderType();
-                        if(order_type == OP_BUY || order_type == OP_SELL)
+                        datetime close_time = OrderCloseTime():
+                        if(close_time == 0)
                         {
-                            // order is open
-                            // TODO
+                            // order is either pending or open
+                            int order_type = OrderType();
+                            if(order_type == OP_BUY || order_type == OP_SELL)
+                            {
+                              // order is open
+                              if (Trades[trade_index].state == PENDING)
+                              {
+                                  // trade was pending, new open
+                              }
+                              if (Trades[trade_index].state == OPEN)
+                              {
+                                  // trade was open, still open
+                              }
+                              if (Trades[trade_index].state == CLOSED || Trades[trade_index].state == REPLACED)
+                              {
+                                  // trade state error!!!!
+                                  PrintMsg("DebugLogHandle","Trade error, trade is open but state should not be open");
+                              }
+                              // TODO
+                            }
+                            else
+                            {
+                                // order is pending
+                            }
                         }
                         else
                         {
-                            // order is pending
+                            //order is closed
                         }
                     }
-                    else
-                    {
-                        //order is closed
-                    }
                 }
+                else
+                {
+                    // order could not be selected
+                    PrintMsg()
+                }  
             }
-            else
-            {
-                // order could not be selected
-                PrintMsg()
-            }
+            
 
 
 
