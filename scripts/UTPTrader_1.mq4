@@ -42,7 +42,7 @@ Trade Trades[70]; // max number of trades is num_instruments x 4 (lewt,lsms,ssms
 
 /* initialisation of sinstruments */
 /* not used in normal running, only used first time instruments are initialised */
-/*                   Symbol 	    Base        Minimum Lot  	Pip         trade */
+/*                   Symbol         Base        Minimum Lot     Pip         trade */
 /*                                  Currency    Trade   Size    Location    tickets */
 /*                                  Chart       Size */
 Instrument instr01("EURUSD",       "GBPUSD",   0.01,   100000,   0.0001,     0,0,0,0);       //USD
@@ -1158,37 +1158,59 @@ void CheckPlacedTrades()
                             int order_type = OrderType();
                             if(order_type == OP_BUY || order_type == OP_SELL)
                             {
-                              // order is open
-                              if (Trades[trade_index].state == PENDING)
-                              {
-                                  // trade was pending, new open
-                              }
-                              if (Trades[trade_index].state == OPEN)
-                              {
-                                  // trade was open, still open
-                              }
-                              if (Trades[trade_index].state == CLOSED || Trades[trade_index].state == REPLACED)
-                              {
+                                // order is open
+                                if (Trades[trade_index].state == PENDING)
+                                {
+                                    // trade was pending, new open
+                                    // record open price
+                                    Trades[trade_index].price = OpenOrderPrice();
+                                    Trades[trade_index].comment;
+                                    Trades[trade_index].is_filled = true;
+                                    Trades[trade_index].state = OPEN;
+                                    PrintMsg(DebugLogHandle,StringFormat("open price for the order ticket number %d = %f ",Trades[trade_index].price);
+
+                                }
+                                if (Trades[trade_index].state == OPEN)
+                                {
+                                    // trade was open, still open
+                                    // adjust stop loss?
+                                }
+                                if (Trades[trade_index].state == CLOSED || Trades[trade_index].state == REPLACED)
+                                {
                                   // trade state error!!!!
-                                  PrintMsg("DebugLogHandle","Trade error, trade is open but state should not be open");
-                              }
-                              // TODO
+                                  PrintMsg(DebugLogHandle,"Trade error, trade is open but state should not be open");
+                                }
+
                             }
                             else
                             {
-                                // order is pending
+                                if (Trades[trade_index].state == PENDING)
+                                {
+                                    // order is still pending
+                                    // adjust ewt/sms values
+
+                                }
+
                             }
                         }
                         else
                         {
                             //order is closed
+                            Trades[trade_index].price = OpenOrderPrice();
+                            Trades[trade_index].comment;
+                            Trades[trade_index].is_filled = true;
+                            Trades[trade_index].state = OPEN;
+                            PrintMsg(DebugLogHandle,StringFormat("open price for the order ticket number %d = %f ",Trades[trade_index].price);
+
+
+
                         }
                     }
                 }
                 else
                 {
                     // order could not be selected
-                    PrintMsg()
+                    PrintMsg("DebugLogHandle",StringFormat("Trade error, order could not be selected. OrderSelect returned the error of %s",GetLastError()));
                 }  
             }
             
