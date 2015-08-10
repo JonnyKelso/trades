@@ -23,17 +23,18 @@ enum TradeState
     TS_INVALID,
     TS_PENDING,
     TS_OPEN,
-    TS_CLOSED
+    TS_CLOSED,
+    TS_DELETED
 };
 enum TradeOperation
 {
-    OP_INVALID,
-    OP_BUY,          // - buy order,
-    OP_SELL,         // - sell order,
-    OP_BUYLIMIT,     // - buy limit pending order,
-    OP_BUYSTOP,      // - buy stop pending order,
-    OP_SELLLIMIT,    // - sell limit pending order,
-    OP_SELLSTOP      // - sell stop pending order.
+    TO_INVALID,
+    TO_BUY,
+    TO_SELL,         // - sell order,
+    TO_BUYLIMIT,     // - buy limit pending order,
+    TO_BUYSTOP,      // - buy stop pending order,
+    TO_SELLLIMIT,    // - sell limit pending order,
+    TO_SELLSTOP      // - sell stop pending order.
 };
 
 class Trade
@@ -42,25 +43,25 @@ private:
 
 public:
        Trade();
-       Trade(  int ticket_num;
-               string symb;
-               double oprice;
-               datetime otime;
-               double cprice;
-               datetime ctime;
-               double vol;
-               double sloss;
-               double tprofit;
-               double comm;
-               double swp;
-               double prft;
-               double magic_num;
-               datetime exp_date;
-               string cmmnt;
-               TradeType ttype;  
-               TradeOperation toperation;
-               bool filled;
-               TradeState tstate;
+       Trade(  int ticket_num,
+               string symb,
+               double oprice,
+               datetime otime,
+               double cprice,
+               datetime ctime,
+               double vol,
+               double sloss,
+               double tprofit,
+               double comm,
+               double swp,
+               double prft,
+               double magic_num,
+               datetime exp_date,
+               string cmmnt,
+               TradeType ttype,  
+               TradeOperation toperation,
+               bool filled,
+               TradeState tstate
             );
 
       ~Trade();
@@ -68,6 +69,10 @@ public:
       string AsString();
       void Clear();
       void Copy(Trade &other);
+      void Trade::SetTradeType(string str);
+      void Trade::SetTradeOperation(string str);
+      void Trade::SetTradeState(string str);
+      void Trade::SetIsFilled(string str);            
       
       int ticket_number;
       string symbol;
@@ -78,7 +83,7 @@ public:
       double volume;
       double stoploss;
       double take_profit;
-      double commision;
+      double commission;
       double swap;
       double profit;
       double magic_number;
@@ -104,14 +109,14 @@ Trade::Trade()
     volume              = 0.0;
     stoploss            = 0.0;
     take_profit         = 0.0;
-    commision           = 0.0;
+    commission           = 0.0;
     swap                = 0.0;
     profit              = 0.0;
     magic_number        = 0.0;
     expiration_date     = __DATETIME__;
     comment             = "";
     trade_type          = TT_INVALID;
-    trade_operation     = OP_INVALID;
+    trade_operation     = TO_INVALID;
     is_filled           = false;
     trade_state         = TS_INVALID;
 
@@ -120,25 +125,25 @@ Trade::Trade()
 //|                                                                  |
 //+------------------------------------------------------------------+  
 Trade::Trade(
-                int ticket_num;
-                string symb;
-                double oprice;
-                datetime otime;
-                double cprice;
-                datetime ctime;
-                double vol;
-                double sloss;
-                double tprofit;
-                double comm;
-                double swp;
-                double prft;
-                double magic_num;
-                datetime exp_date;
-                string cmmnt;
-                TradeType ttype;  
-                TradeOperation toperation;
-                bool filled;
-                TradeState tstate;
+                int ticket_num,
+                string symb,
+                double oprice,
+                datetime otime,
+                double cprice,
+                datetime ctime,
+                double vol,
+                double sloss,
+                double tprofit,
+                double comm,
+                double swp,
+                double prft,
+                double magic_num,
+                datetime exp_date,
+                string cmmnt,
+                TradeType ttype,  
+                TradeOperation toperation,
+                bool filled,
+                TradeState tstate
             )
 {
     ticket_number        = ticket_num;
@@ -184,21 +189,22 @@ string Trade::AsString()
    if(trade_state == TS_PENDING){tstate = "PENDING";}
    if(trade_state == TS_OPEN){tstate = "OPEN";}
    if(trade_state == TS_CLOSED){tstate = "CLOSED";}
+   if(trade_state == TS_DELETED){tstate = "DELETED";}
 
    string toperation = "";
-   if(trade_operation == OP_INVALID){toperation = "INVALID";}
-   if(trade_operation == OP_BUY){toperation = "OP_BUY";}
-   if(trade_operation == OP_SELL){toperation = "OP_SELL";}
-   if(trade_operation == OP_BUYLIMIT){toperation = "OP_BUYLIMIT";
-   if(trade_operation == OP_BUYSTOP){toperation = "OP_BUYSTOP";
-   if(trade_operation == OP_SELLLIMIT){toperation = "OP_SELLLIMIT";
-   if(trade_operation == OP_SELLSTOP){toperation = "OP_SELLSTOP";
+   if(trade_operation == TO_INVALID){toperation = "TO_INVALID";}
+   if(trade_operation == TO_BUY){toperation = "TO_BUY";}
+   if(trade_operation == TO_SELL){toperation = "TO_SELL";}
+   if(trade_operation == TO_BUYLIMIT){toperation = "TO_BUYLIMIT";}
+   if(trade_operation == TO_BUYSTOP){toperation = "TO_BUYSTOP";}
+   if(trade_operation == TO_SELLLIMIT){toperation = "TO_SELLLIMIT";}
+   if(trade_operation == TO_SELLSTOP){toperation = "TO_SELLSTOP";}
 
-   string open_time_string = TimeToString(open_time,TIME_DATE|TIME_SECS);
-   string close_time_string = TimeToString(close_time,TIME_DATE|TIME_SECS);
-   string expiration_date_string = TimeToString(open_time,TIME_DATE|TIME_SECS);
+   string open_time_string = TimeToString(open_time,TIME_DATE|TIME_SECONDS);
+   string close_time_string = TimeToString(close_time,TIME_DATE|TIME_SECONDS);
+   string expiration_date_string = TimeToString(open_time,TIME_DATE|TIME_SECONDS);
 
-   string str = StringFormat("%d,%s,%f,%s,%f,%s,%f,%f,%f,%f,%f,%f,%f,%s,%s,%d,%s\n",
+   string str = StringFormat("%d,%s,%f,%s,%f,%s,%f,%f,%f,%f,%f,%f,%f,%s,%s,%s,%s,%s,%s\n",
                             ticket_number,
                             symbol,
                             open_price,
@@ -242,7 +248,7 @@ void Trade::Clear()
     expiration_date      = __DATETIME__;
     comment              = "";
     trade_type           = TT_INVALID; 
-    trade_operation      = OP_INVALID;
+    trade_operation      = TO_INVALID;
     is_filled            = false;
     trade_state          = TS_INVALID;
 }
@@ -272,3 +278,93 @@ void Trade::Copy(Trade &other)
     trade_state          = other.trade_state;
 }
 //+------------------------------------------------------------------+
+void Trade::SetTradeType(string str)
+{
+    if(str == "INVALID")
+    {
+        trade_type = TT_INVALID;
+    }
+    if(str == "LSMS")
+    {
+        trade_type = TT_LSMS;
+    }
+    if(str == "LEWT")
+    {
+        trade_type = TT_LEWT;
+    }
+    if(str == "SEWT")
+    {
+        trade_type = TT_SEWT;
+    }
+    if(str == "SSMS")
+    {
+        trade_type = TT_SSMS;
+    }
+}
+//+------------------------------------------------------------------+
+void Trade::SetTradeOperation(string str)
+{
+    if(str == "TO_INVALID")
+    {
+        trade_operation = TO_INVALID;
+    }
+    if(str == "TO_BUY")
+    {
+        trade_operation = TO_BUY;
+    }
+    if(str == "TO_SELL")
+    {
+        trade_operation = TO_SELL;
+    }
+    if(str == "TO_BUYLIMIT")
+    {
+        trade_operation = TO_BUYLIMIT;
+    }
+    if(str == "TO_BUYSTOP")
+    {
+        trade_operation = TO_BUYSTOP;
+    }
+    if(str == "TO_SELLLIMIT")
+    {
+        trade_operation = TO_SELLLIMIT;
+    }
+    if(str == "TO_SELLSTOP")
+    {
+        trade_operation = TO_SELLSTOP;
+    }
+}
+//+------------------------------------------------------------------+
+void Trade::SetTradeState(string str)
+{
+    if(str == "INVALID")
+    {
+        trade_state = TS_INVALID;
+    }
+    if(str == "PENDING")
+    {
+        trade_state = TS_PENDING;
+    }
+    if(str == "OPEN")
+    {
+        trade_state = TS_OPEN;
+    }
+    if(str == "CLOSED")
+    {
+        trade_state = TS_CLOSED;
+    }
+    if(str == "DELETED")
+    {
+        trade_state = TS_DELETED;
+    }
+}
+void Trade::SetIsFilled(string str)
+{
+    if(str == "true")
+    {
+        is_filled = true;
+    }
+    if(str == "false")
+    {
+        is_filled = false;
+    }
+}

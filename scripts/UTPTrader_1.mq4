@@ -18,15 +18,17 @@ const int CONST_MAX_PERIOD = 60;
 const int CONST_SMS_PERIOD = 52;
 const int CONST_EWT_PERIOD = 21;
 const int CONST_NUM_SYMBOLS = 17;
-const int CONST_MAX_NUM_TRADES = 70;
+const int CONST_MAX_NUM_TRADES = 150;
 
 /* filenames and handles */
 string InstrsLogFilename= "UTP_InstrsLog.csv";
 string DebugLogFilename = "UTP_DebugLog.csv";
 string TradeLogFilename = "UTP_TradeLog.csv";
+string TradesListFilename = "UTP_TradesList.csv";
 int InstrsLogHandle= -1;
 int DebugLogHandle = -1;
 int TradeLogHandle = -1;
+int TradesListHandle = -1;
 
 /* 1 years worth of ewt indexes */
 int EWT_HIGH[365];
@@ -38,7 +40,7 @@ string point2_date = "";
 string point3_date = "";
 string point4_date = "";
 Instrument Instrs[17];
-Trade Trades[70]; // max number of trades is num_instruments x 4 (lewt,lsms,ssms,sewt)
+Trade Trades[150]; // max number of trades is num_instruments x 4 (lewt,lsms,ssms,sewt)
 
 /* initialisation of sinstruments */
 /* not used in normal running, only used first time instruments are initialised */
@@ -144,7 +146,7 @@ int ReadInstrsLog()
      {
       while(!FileIsEnding(InstrsLogHandle))
         {
-         for(int index=0; index<17; index++)
+         for(int index=0; index<CONST_NUM_SYMBOLS; index++)
            {
             string symbol_str="";
 
@@ -184,42 +186,42 @@ int ReadInstrsLog()
 
 /*--------------------------------------------------------------------------------------------------------------------*/
 /* Write Instrs array to file */
-int WriteInstrsLog()
-  {
-   PrintMsg(DebugLogHandle,"WriteInstrsLog called");
-   if(InstrsLogHandle>-1)
-     {
-      FileClose(InstrsLogHandle);
-      InstrsLogHandle=-1;
-     }
-   InstrsLogHandle=FileOpen(InstrsLogFilename,FILE_CSV|FILE_WRITE|FILE_ANSI);
-   if(InstrsLogHandle==-1){ return 1; }
+int WriteInstrsList()
+{
+    PrintMsg(DebugLogHandle,"WriteInstrsList called");
+    if(InstrsLogHandle>-1)
+    {
+        FileClose(InstrsLogHandle);
+        InstrsLogHandle=-1;
+    }
+    InstrsLogHandle=FileOpen(InstrsLogFilename,FILE_CSV|FILE_WRITE|FILE_ANSI);
+    if(InstrsLogHandle==-1){ return 1; }
 
-   for(int index=0; index<17; index++)
-     {
-      FileWriteString(InstrsLogHandle,Instrs[index].AsString());
-     }
-   FileClose(InstrsLogHandle);
-   InstrsLogHandle=-1;
+    for(int index=0; index<CONST_NUM_SYMBOLS; index++)
+    {
+        FileWriteString(InstrsLogHandle,Instrs[index].AsString());
+    }
+    FileClose(InstrsLogHandle);
+    InstrsLogHandle=-1;
 
-   PrintMsg(DebugLogHandle,"WriteInstrsLog returned");
-   return 0;
-  }
+    PrintMsg(DebugLogHandle,"WriteInstrsList returned");
+    return 0;
+}
 
 /*--------------------------------------------------------------------------------------------------------------------*/
-/* Read the trade log */
-int ReadTradeLog()
+/* Read the trades list */
+int ReadTradesList()
 {
-    PrintMsg(DebugLogHandle,"ReadTradeLog called");
-    TradeLogHandle= -1;
-    TradeLogHandle=FileOpen(TradeLogFilename,FILE_CSV|FILE_READ);
-    if(TradeLogHandle>-1)
+    PrintMsg(DebugLogHandle,"ReadTradesList called");
+    TradesListHandle= -1;
+    TradesListHandle=FileOpen(TradesListFilename,FILE_CSV|FILE_READ);
+    if(TradesListHandle>-1)
     {
         int index = 0;
-        while(!FileIsEnding(TradeLogHandle))
+        while(!FileIsEnding(TradesListHandle))
         {
             //string symbol_str="";
-            string line=FileReadString(TradeLogHandle,1);
+            string line=FileReadString(TradesListHandle,1);
             string separator=",";
             ushort sep=StringGetCharacter(separator,0);
             string strings[];
@@ -228,26 +230,40 @@ int ReadTradeLog()
             {
                 Trades[index].ticket_number=(int)StringToInteger(strings[0]);
                 Trades[index].symbol=strings[1];
-                Trades[index].price=StringToDouble(strings[2]);
-                Trades[index].volume=StringToDouble(strings[3]);
-                Trades[index].stoploss=StringToDouble(strings[4]);
-                Trades[index].take_profit = StringToDouble(strings[5]);
-                Trades[index].comment = strings[6];
-                Trades[index].trade_type = (TradeType)((int)StringToInteger(strings[7]));
-                Trades[index].is_filled = ((int)StringToInteger(strings[8]) > 0 ? true : false);
+                Trades[index].open_price=StringToDouble(strings[2]);
+                Trades[index].open_time=StringToTime(strings[3]);
+                Trades[index].close_price=StringToDouble(strings[4]);
+                Trades[index].close_time=StringToTime(strings[5]);
+                Trades[index].volume=StringToDouble(strings[6]);
+                Trades[index].stoploss=StringToDouble(strings[7]);
+                Trades[index].take_profit = StringToDouble(strings[8]);
+                Trades[index].commission = StringToDouble(strings[9]);
+                Trades[index].swap = StringToDouble(strings[10]);
+                Trades[index].profit = StringToDouble(strings[11]);
+                Trades[index].magic_number = StringToDouble(strings[12]);
+                Trades[index].expiration_date = StringToTime(strings[13]);
+                Trades[index].comment = strings[14];
+                PrintMsg(DebugLogHandle,StringFormat("trade type ==== %s",strings[15]));
+                Trades[index].SetTradeType(StringFormat("%s",strings[15]));
+                PrintMsg(DebugLogHandle,StringFormat("trade op ==== %s",strings[16]));
+                Trades[index].SetTradeOperation(StringFormat("%s",strings[16]));
+                PrintMsg(DebugLogHandle,StringFormat("filled ==== %s",strings[17]));
+                Trades[index].SetIsFilled(StringFormat("%s",strings[17]));
+                PrintMsg(DebugLogHandle,StringFormat("trade state ==== %s",strings[18]));
+                Trades[index].SetTradeState(StringFormat("%s",strings[18]));
                 
-                PrintMsg(DebugLogHandle,StringFormat("ReadTradeLog: Trades[%d]=%s",index,Trades[index].AsString()));            
+                PrintMsg(DebugLogHandle,StringFormat("ReadTradesList: Trades[%d]=%s",index,Trades[index].AsString()));            
             }
             index++;
         }
     }
     else
     {
-        PrintMsg(DebugLogHandle,"ReadTradeLog - Invalid file handle passed");
+        PrintMsg(DebugLogHandle,"ReadTradesList - Invalid file handle passed");
     }
-    FileClose(TradeLogHandle);
-    TradeLogHandle=-1;
-    PrintMsg(DebugLogHandle,"ReadTradeLog returned");
+    FileClose(TradesListHandle);
+    TradesListHandle=-1;
+    PrintMsg(DebugLogHandle,"ReadTradesList returned");
 
     return 0;
 }
@@ -270,6 +286,35 @@ int WriteTradeLog(Trade &trade)
 
     PrintMsg(DebugLogHandle,"WriteTradeLog returned");
 
+    return 0;
+}
+/*--------------------------------------------------------------------------------------------------------------------*/
+/* Write Trades array to file */
+int WriteTradesList()
+{
+    PrintMsg(DebugLogHandle,"WriteTradesList called");
+    if(TradesListHandle>-1)
+    {
+        FileClose(TradesListHandle);
+        TradesListHandle=-1;
+    }
+    TradesListHandle=FileOpen(TradesListFilename,FILE_CSV|FILE_WRITE|FILE_ANSI);
+    if(TradesListHandle==-1){ return 1; }
+
+    for(int index=0; index<CONST_MAX_NUM_TRADES; index++)
+    {
+        if(Trades[index].trade_state != TS_INVALID && 
+           Trades[index].trade_state != TS_CLOSED && 
+           Trades[index].trade_state != TS_DELETED)
+        {
+            FileWriteString(TradesListHandle,Trades[index].AsString());
+        }
+        
+    }
+    FileClose(TradesListHandle);
+    TradesListHandle=-1;
+
+    PrintMsg(DebugLogHandle,"WriteTradesList returned");
     return 0;
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
@@ -812,7 +857,7 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
 {
     PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder called with\n instrument=%s ttype=%d",inst.AsString(),ttype));
 
-   double trade_price = 0.0;
+    double trade_price = 0.0;
     bool trade_placed = false;
     double ATR15=iATR(inst.symbol,PERIOD_D1,15,0);
     double RV=2*ATR15;
@@ -862,7 +907,7 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
     //*************************
     double takeprofit=0;
 
-    if(ttype==LSMS)
+    if(ttype==TT_LSMS)
     {
     //int OrderSend (string symbol, int cmd, double volume, double price, int slippage, double stoploss,
     //              double takeprofit, string comment=NULL, int magic=0, datetime expiration=0, color arrow_color=clrGreen)
@@ -879,7 +924,7 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
                 takeprofit=price+(100*RV);
                 string comment="jk_lsms";
 
-                int ticket=1111; //OrderSend(inst.symbol,OP_BUYSTOP,Trade_size_MT4_rounded,price,0,stoploss,takeprofit,comment,0,0,clrGreen);
+                int ticket=OrderSend(inst.symbol,OP_BUYSTOP,Trade_size_MT4_rounded,price,0,stoploss,takeprofit,comment,0,0,clrGreen);
                 PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[BUYSTOP],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
                                                 inst.symbol,Trade_size_MT4_rounded,price,stoploss,takeprofit,comment));
 
@@ -898,19 +943,21 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
                     placed_trade.Clear();
                     placed_trade.ticket_number=ticket;
                     placed_trade.symbol= inst.symbol;
-                    placed_trade.price = price;
+                    placed_trade.open_price = price;
                     placed_trade.volume= Trade_size_MT4_rounded;
                     placed_trade.stoploss=stoploss;
                     placed_trade.take_profit=takeprofit;
                     placed_trade.comment=comment;
-                    placed_trade.trade_type=LSMS;
+                    placed_trade.trade_type=TT_LSMS;
+                    placed_trade.trade_operation = TO_BUYSTOP;
+                    placed_trade.trade_state = TS_PENDING;
                     //WriteTradeLog(placed_trade);
                     trade_price=price;
                 }
             }
         }
     }
-    if(ttype==LEWT)
+    if(ttype==TT_LEWT)
     {
         int lewt_index=-1;
         double lewt_value=-1;
@@ -925,7 +972,7 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
                 takeprofit=price+(100*RV);
                 string comment="jk_lewt";
 
-                int ticket=2222; //OrderSend(inst.symbol,OP_BUYSTOP,Trade_size_MT4_rounded,price,0,stoploss,takeprofit,comment,0,0,clrGreen);
+                int ticket=OrderSend(inst.symbol,OP_BUYSTOP,Trade_size_MT4_rounded,price,0,stoploss,takeprofit,comment,0,0,clrGreen);
                 PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[BUYSTOP],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
                                                 inst.symbol,Trade_size_MT4_rounded,price,stoploss,takeprofit,comment));
 
@@ -944,12 +991,14 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
                     placed_trade.Clear();
                     placed_trade.ticket_number=ticket;
                     placed_trade.symbol= inst.symbol;
-                    placed_trade.price = price;
+                    placed_trade.open_price = price;
                     placed_trade.volume= Trade_size_MT4_rounded;
                     placed_trade.stoploss=stoploss;
                     placed_trade.take_profit=takeprofit;
                     placed_trade.comment=comment;
-                    placed_trade.trade_type=LEWT;
+                    placed_trade.trade_type=TT_LEWT;
+                    placed_trade.trade_operation = TO_BUYSTOP;
+                    placed_trade.trade_state = TS_PENDING;
                     //WriteTradeLog(placed_trade);
                     trade_price=price;
                 }
@@ -957,7 +1006,7 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
 
         }
     }
-    if(ttype==SEWT)
+    if(ttype==TT_SEWT)
     {
         int sewt_index=-1;
         double sewt_value=-1;
@@ -973,7 +1022,7 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
                 if(takeprofit<0){takeprofit=0;}
                 string comment="jk_sewt";
 
-                int ticket=3333; //OrderSend(inst.symbol,OP_SELLSTOP,Trade_size_MT4_rounded,price,0,stoploss,takeprofit,comment,0,0,clrGreen);
+                int ticket=OrderSend(inst.symbol,OP_SELLSTOP,Trade_size_MT4_rounded,price,0,stoploss,takeprofit,comment,0,0,clrGreen);
                 PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[BUYSTOP],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
                                                 inst.symbol,Trade_size_MT4_rounded,price,stoploss,takeprofit,comment));
 
@@ -992,19 +1041,21 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
                     placed_trade.Clear();
                     placed_trade.ticket_number=ticket;
                     placed_trade.symbol= inst.symbol;
-                    placed_trade.price = price;
+                    placed_trade.open_price = price;
                     placed_trade.volume= Trade_size_MT4_rounded;
                     placed_trade.stoploss=stoploss;
                     placed_trade.take_profit=takeprofit;
                     placed_trade.comment=comment;
-                    placed_trade.trade_type=SEWT;
+                    placed_trade.trade_type=TT_SEWT;
+                    placed_trade.trade_operation = TO_SELLSTOP;
+                    placed_trade.trade_state = TS_PENDING;
                     //WriteTradeLog(placed_trade);
                     trade_price=price;
                 }
             }
         }
     }
-    if(ttype==SSMS)
+    if(ttype==TT_SSMS)
     {
         int ssms_index=-1;
         double ssms_value=-1;
@@ -1020,7 +1071,7 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
                 if(takeprofit<0){takeprofit=0;}
                 string comment="jk_ssms";
 
-                int ticket=4444; //OrderSend(inst.symbol,OP_SELLSTOP,Trade_size_MT4_rounded,price,0,stoploss,takeprofit,comment,0,0,clrGreen);
+                int ticket=OrderSend(inst.symbol,OP_SELLSTOP,Trade_size_MT4_rounded,price,0,stoploss,takeprofit,comment,0,0,clrGreen);
                 PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[BUYSTOP],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
                                                 inst.symbol,Trade_size_MT4_rounded,price,stoploss,takeprofit,comment));
 
@@ -1039,12 +1090,14 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
                     placed_trade.Clear();
                     placed_trade.ticket_number=ticket;
                     placed_trade.symbol= inst.symbol;
-                    placed_trade.price = price;
+                    placed_trade.open_price = price;
                     placed_trade.volume= Trade_size_MT4_rounded;
                     placed_trade.stoploss=stoploss;
                     placed_trade.take_profit=takeprofit;
                     placed_trade.comment=comment;
-                    placed_trade.trade_type=SSMS;
+                    placed_trade.trade_type=TT_SSMS;
+                    placed_trade.trade_operation = TO_SELLSTOP;
+                    placed_trade.trade_state = TS_PENDING;
                     //WriteTradeLog(placed_trade);
                     trade_price=price;
                 }
@@ -1059,72 +1112,78 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
 /* For the given symbol and trade type, find the indicator boundary and make a trade */
 double MakeTrade(Instrument &inst,TradeType ttype)
 {
-   PrintMsg(DebugLogHandle,StringFormat("MakeTrade called with\n symbol=%s ltc period = %d ttype=%d",inst.symbol,ttype));
-   bool made_trade=false;
-   double made_price=0.0;
-   // make trade for LEWT
-   int index=-1;
-   double value=-1;
+    PrintMsg(DebugLogHandle,StringFormat("MakeTrade called with\n symbol=%s ltc period = %d ttype=%d",inst.symbol,ttype));
+    //bool made_trade=false;
+    double made_price=0.0;
+    int index=-1;
+    double value=-1;
 
-   if(ttype==LEWT || ttype==LSMS)
-   {
-      index=iHighest(inst.symbol,PERIOD_D1,MODE_HIGH,CONST_EWT_PERIOD,0);
-      if(index>-1)
-      {
-          value=iHigh(inst.symbol,PERIOD_D1,index);
-          if(value>-1)
-          {
-              Trade new_trade;
-              new_trade.Clear();
-              made_price=MakePendingOrder(inst,ttype,new_trade);
-              WriteTradeLog(new_trade);
-              //AddTrade(new_trade);
-          }
-          else
-          {
-              PrintMsg(DebugLogHandle,StringFormat("MakeTrade: Symbol %s: error in value. iHigh returned -1, couldn't find value in ltct period.",inst.symbol));
-          }
-      }
-      else
-      {
-          PrintMsg(DebugLogHandle,StringFormat("MakeTrade: Symbol %s: error in index. iHighest returned -1, couldn't find index in ltct period.",inst.symbol));
-      }
-   }
+    if(ttype==TT_LEWT || ttype==TT_LSMS)
+    {
+        int period = 0;
+        if(ttype==TT_LEWT){ period = CONST_EWT_PERIOD; }
+        if(ttype==TT_LSMS){ period = CONST_SMS_PERIOD; }
+        index=iHighest(inst.symbol,PERIOD_D1,MODE_HIGH,period,0);
+        if(index>-1)
+        {
+            value=iHigh(inst.symbol,PERIOD_D1,index);
+            if(value>-1)
+            {
+                Trade new_trade;
+                new_trade.Clear();
+                made_price=MakePendingOrder(inst,ttype,new_trade);
+                WriteTradeLog(new_trade);
+                AddTrade(new_trade);
+            }
+            else
+            {
+                PrintMsg(DebugLogHandle,StringFormat("MakeTrade: Symbol %s: error in value. iHigh returned -1, couldn't find value in ltct period.",inst.symbol));
+            }
+        }
+        else
+        {
+            PrintMsg(DebugLogHandle,StringFormat("MakeTrade: Symbol %s: error in index. iHighest returned -1, couldn't find index in ltct period.",inst.symbol));
+        }
+    }
 
-   if(ttype==SEWT || ttype==SSMS)
-   {
-      index=iLowest(inst.symbol,PERIOD_D1,MODE_LOW,CONST_SMS_PERIOD,0);
-      if(index>-1)
-      {
-          value=iLow(inst.symbol,PERIOD_D1,index);
-          if(value>-1)
-          {
-              Trade new_trade;
-              new_trade.Clear();
-              made_price=MakePendingOrder(inst,ttype,new_trade);
-              WriteTradeLog(new_trade);
-              //AddTrade(new_trade);
-          }
-          else
-          {
-              PrintMsg(DebugLogHandle,StringFormat("MakeTrade: Symbol %s: error in value. iHigh returned -1, couldn't find value in ltct period.",inst.symbol));
-          }
-      }
-      else
-      {
-          PrintMsg(DebugLogHandle,StringFormat("OnStart: Symbol %s: error in index. iHighest returned -1, couldn't find index in ltct period.",inst.symbol));
-      }
-   }
-   PrintMsg(DebugLogHandle,StringFormat("MakeTrade returned %s ",(made_trade ? "true" : "false")));
-   return made_price; 
+    if(ttype==TT_SEWT || ttype==TT_SSMS)
+    {
+        int period = 0;
+        if(ttype==TT_SEWT){ period = CONST_EWT_PERIOD; }
+        if(ttype==TT_SSMS){ period = CONST_SMS_PERIOD; }
+        index=iLowest(inst.symbol,PERIOD_D1,MODE_LOW,period,0);
+        if(index>-1)
+        {
+            value=iLow(inst.symbol,PERIOD_D1,index);
+            if(value>-1)
+            {
+                Trade new_trade;
+                new_trade.Clear();
+                made_price=MakePendingOrder(inst,ttype,new_trade);
+                WriteTradeLog(new_trade);
+                AddTrade(new_trade);
+            }
+            else
+            {
+                PrintMsg(DebugLogHandle,StringFormat("MakeTrade: Symbol %s: error in value. iHigh returned -1, couldn't find value in ltct period.",inst.symbol));
+            }
+        }
+        else
+        {
+            PrintMsg(DebugLogHandle,StringFormat("OnStart: Symbol %s: error in index. iHighest returned -1, couldn't find index in ltct period.",inst.symbol));
+        }
+    }
+    //PrintMsg(DebugLogHandle,StringFormat("MakeTrade returned %s ",(made_trade ? "true" : "false")));
+    return made_price; 
 }
+/*--------------------------------------------------------------------------------------------------------------------*/
 int GetTradeIndexFromTicketNumber(int ticket_num)
 {
     int trade_index = -1;
     // get trade info
-    for(trade_index = 0; trade_index < CONST_MAX_NUM_TRADES; trade_index)
+    for(trade_index = 0; trade_index < CONST_MAX_NUM_TRADES; trade_index++)
     {
-        if(Trades[trade_index].ticket_number == ticket_no)
+        if(Trades[trade_index].ticket_number == ticket_num)
         {
             // found trade
             break;
@@ -1133,115 +1192,318 @@ int GetTradeIndexFromTicketNumber(int ticket_num)
     return trade_index;
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
-void CheckPlacedTrades()
-{
-    for (int index = 0; index < CONST_NUM_SYMBOLS; index++)
-    {
-        if(Instrs[index].lsms_trade > 0)
-        {
-            int ticket_no = Instrs[index].lsms_trade;
-            int trade_index = GetTradeIndexFromTicketNumber(ticket_no);
+// void CheckPlacedTrades()
+// {
+    // for (int index = 0; index < CONST_NUM_SYMBOLS; index++)
+    // {
+        // if(Instrs[index].lsms_trade > 0)
+        // {
+            // int ticket_no = Instrs[index].lsms_trade;
+            // int trade_index = GetTradeIndexFromTicketNumber(ticket_no);
 
-            if(trade_index > -1 && Trades[trade_index].state != INVALID)
-            {
-                // operate on order, must 'select' it first
-                bool selected = OrderSelect(ticket_no,SELECT_BY_TICKET);
-                if(selected)
-                {
-                    // check the trade has the right symbol
-                    if(OrderSymbol() == Instrs[index].symbol)
-                    {
-                        datetime close_time = OrderCloseTime():
-                        if(close_time == 0)
-                        {
-                            // order is either pending or open
-                            int order_type = OrderType();
-                            if(order_type == OP_BUY || order_type == OP_SELL)
-                            {
-                                // order is open
-                                if (Trades[trade_index].state == PENDING)
-                                {
-                                    // trade was pending, new open
-                                    // record open price
-                                    Trades[trade_index].price = OpenOrderPrice();
-                                    Trades[trade_index].comment;
-                                    Trades[trade_index].is_filled = true;
-                                    Trades[trade_index].state = OPEN;
-                                    PrintMsg(DebugLogHandle,StringFormat("open price for the order ticket number %d = %f ",Trades[trade_index].price);
+            // if(trade_index > -1 && Trades[trade_index].state != INVALID)
+            // {
+                // // operate on order, must 'select' it first
+                // bool selected = OrderSelect(ticket_no,SELECT_BY_TICKET);
+                // if(selected)
+                // {
+                    // // check the trade has the right symbol
+                    // if(OrderSymbol() == Instrs[index].symbol)
+                    // {
+                        // datetime close_time = OrderCloseTime():
+                        // if(close_time == 0)
+                        // {
+                            // // order is either pending or open
+                            // int order_type = OrderType();
+                            // if(order_type == OP_BUY || order_type == OP_SELL)
+                            // {
+                                // // order is open
+                                // if (Trades[trade_index].state == PENDING)
+                                // {
+                                    // // trade was pending, now open
+                                    // // record open price
+                                    // Trades[trade_index].open_price = OpenOrderPrice();
+                                    // // Trades[trade_index].comment;
+                                    // Trades[trade_index].is_filled = true;
+                                    // Trades[trade_index].trade_state = TS_OPEN;
+                                    // PrintMsg(DebugLogHandle,StringFormat("open price for the order ticket number %d = %f ",Trades[trade_index].open_price);
 
-                                }
-                                if (Trades[trade_index].state == OPEN)
-                                {
-                                    // trade was open, still open
-                                    // adjust stop loss?
-                                }
-                                if (Trades[trade_index].state == CLOSED || Trades[trade_index].state == REPLACED)
-                                {
-                                  // trade state error!!!!
-                                  PrintMsg(DebugLogHandle,"Trade error, trade is open but state should not be open");
-                                }
+                                // }
+                                // if (Trades[trade_index].trade_state == OPEN)
+                                // {
+                                    // // trade was open, still open
+                                    // // adjust stop loss?
+                                // }
+                                // if (Trades[trade_index].trade_state == CLOSED || Trades[trade_index].trade_state == REPLACED)
+                                // {
+                                  // // trade state error!!!!
+                                  // PrintMsg(DebugLogHandle,"Trade error, trade is open but state is set CLOSED or REPLACED");
+                                // }
 
-                            }
-                            else
-                            {
-                                if (Trades[trade_index].state == PENDING)
-                                {
-                                    // order is still pending
-                                    // adjust ewt/sms values
+                            // }
+                            // else
+                            // {
+                                // if (Trades[trade_index].trade_state == PENDING)
+                                // {
+                                    // // order is still pending
+                                    // // adjust ewt/sms values
 
-                                }
+                                // }
 
-                            }
-                        }
-                        else
-                        {
-                            //order is closed
-                            Trades[trade_index].price = OpenOrderPrice();
-                            Trades[trade_index].comment;
-                            Trades[trade_index].is_filled = true;
-                            Trades[trade_index].state = OPEN;
-                            PrintMsg(DebugLogHandle,StringFormat("open price for the order ticket number %d = %f ",Trades[trade_index].price);
+                            // }
+                        // }
+                        // else
+                        // {
+                            // // order is closed
+                            // Trades[trade_index].open_price = OpenOrderPrice();
+                            // // Trades[trade_index].comment;
+                            // Trades[trade_index].is_filled = true;
+                            // Trades[trade_index].state = OPEN;
+                            // PrintMsg(DebugLogHandle,StringFormat("open price for the order ticket number %d = %f ",Trades[trade_index].price);
 
 
 
-                        }
-                    }
-                }
-                else
-                {
-                    // order could not be selected
-                    PrintMsg("DebugLogHandle",StringFormat("Trade error, order could not be selected. OrderSelect returned the error of %s",GetLastError()));
-                }  
-            }
+                        // }
+                    // }
+                // }
+                // else
+                // {
+                    // // order could not be selected
+                    // PrintMsg("DebugLogHandle",StringFormat("Trade error, order could not be selected. OrderSelect returned the error of %s",GetLastError()));
+                // }  
+            // }
             
 
 
 
             
-        }
-        if(Instrs[index].lewt_trade > 0)
-        {
-        }
-        if(Instrs[index].sewt_trade > 0)
-        {
-        }
-        if(Instrs[index].ssms_trade > 0)
-        {
-        }
-    }
+        // }
+        // if(Instrs[index].lewt_trade > 0)
+        // {
+        // }
+        // if(Instrs[index].sewt_trade > 0)
+        // {
+        // }
+        // if(Instrs[index].ssms_trade > 0)
+        // {
+        // }
+    // }
 
-}
+// }
+/*--------------------------------------------------------------------------------------------------------------------*/
 void AddTrade(Trade &other)
 {
     for (int index = 0; index < CONST_MAX_NUM_TRADES; index++)
     {
-        if(Trades[index].ticket_number == 0)
+        if(Trades[index].trade_state == TS_INVALID)
         {
-            //  found a non-empty trade
+            //  found an empty trade
             Trades[index].Copy(other);
-            PrintMsg(StringFormat("Added Trade %d at position %d",other.ticket_number,index));
+            PrintMsg(DebugLogHandle,StringFormat("Added Trade %d at position %d",other.ticket_number,index));
+            break;
         }
     }
+}
+/*--------------------------------------------------------------------------------------------------------------------*/
+// update trade
+// returns trade index of ticket number
+void CheckTrade(int trade_index, int instr_index)
+{
+    PrintMsg(DebugLogHandle,StringFormat("CheckTrade called with\n trade_index=%d instr_index=%d",trade_index,instr_index));
+    int order_type = -1;
+    // find out the trades current known status from trade log
+    if(trade_index > -1 && Trades[trade_index].trade_state != TS_INVALID)
+    {
+        if(Trades[trade_index].trade_state == TS_PENDING)
+        {
+            // Trade was last seen as PENDING, could now be either: still PENDING, OPEN or CLOSED
+            // operate on order, must 'select' it first
+            bool selected = OrderSelect(Trades[trade_index].ticket_number,SELECT_BY_TICKET);
+            if(selected)
+            {
+                // check the trade has the right symbol
+                if(OrderSymbol() == Instrs[instr_index].symbol)
+                {
+                    datetime close_time = OrderCloseTime();
+                    if(close_time == 0)
+                    {
+                        // order is either pending or open
+                        order_type = OrderType();
+                        if(order_type > 0 && (order_type == OP_BUY || order_type == OP_SELL))
+                        {
+                            // order is open
+                            Trades[trade_index].open_price = OrderOpenPrice();
+                            Trades[trade_index].open_time = OrderOpenTime();
+                            Trades[trade_index].volume = OrderLots();
+                            Trades[trade_index].stoploss = OrderStopLoss();
+                            Trades[trade_index].take_profit = OrderTakeProfit();
+                            Trades[trade_index].commission = OrderCommission();
+                            Trades[trade_index].swap = OrderSwap();
+                            Trades[trade_index].profit = OrderProfit();
+                            Trades[trade_index].comment = OrderComment();
+                            if(order_type == OP_BUY) { Trades[trade_index].trade_operation = TO_BUY; }
+                            if(order_type == OP_SELL) { Trades[trade_index].trade_operation = TO_SELL; }
+                            Trades[trade_index].is_filled = true;
+                            Trades[trade_index].trade_state = TS_OPEN;
+                            PrintMsg(DebugLogHandle,StringFormat("open price for the order ticket number %d = %f ",Trades[trade_index].ticket_number,Trades[trade_index].open_price));
+                            WriteTradeLog(Trades[trade_index]);
+                            
+                        }
+                        else
+                        {
+                            // order is still pending 
+                            // ATR will have changed, so recalc trade values
+                            // delete and re-make order 
+                            bool deleted = OrderDelete(Trades[trade_index].ticket_number);
+                            if(deleted)
+                            {
+                                Trades[trade_index].trade_state = TS_DELETED;
+                                WriteTradeLog(Trades[trade_index]);
+                                if(Trades[trade_index].trade_type == TT_LSMS) { Instrs[instr_index].lsms_trade = 0; }
+                                if(Trades[trade_index].trade_type == TT_LEWT) { Instrs[instr_index].lewt_trade = 0; }
+                                if(Trades[trade_index].trade_type == TT_SEWT) { Instrs[instr_index].sewt_trade = 0; }
+                                if(Trades[trade_index].trade_type == TT_SSMS) { Instrs[instr_index].ssms_trade = 0; }
+                                TradeType new_trade_type = Trades[trade_index].trade_type;
+                                MakeTrade(Instrs[instr_index],new_trade_type);
+                            }
+                            
+                        }
+                    }
+                    else
+                    {
+                        // order is now closed
+                        Trades[trade_index].close_price = OrderClosePrice();
+                        Trades[trade_index].close_time = OrderCloseTime();
+                        Trades[trade_index].volume = OrderLots();
+                        Trades[trade_index].stoploss = OrderStopLoss();
+                        Trades[trade_index].take_profit = OrderTakeProfit();
+                        Trades[trade_index].commission = OrderCommission();
+                        Trades[trade_index].swap = OrderSwap();
+                        Trades[trade_index].profit = OrderProfit();
+                        Trades[trade_index].comment = OrderComment();
+                        Trades[trade_index].trade_state = TS_CLOSED;
+                        PrintMsg(DebugLogHandle,StringFormat("close price for the order ticket number %d = %f ",Trades[trade_index].ticket_number,Trades[trade_index].close_price));
+                        
+                        if(Trades[trade_index].trade_type == TT_LSMS) { Instrs[instr_index].lsms_trade = 0; }
+                        if(Trades[trade_index].trade_type == TT_LEWT) { Instrs[instr_index].lewt_trade = 0; }
+                        if(Trades[trade_index].trade_type == TT_SEWT) { Instrs[instr_index].sewt_trade = 0; }
+                        if(Trades[trade_index].trade_type == TT_SSMS) { Instrs[instr_index].ssms_trade = 0; }
+                        
+                        // but the order went from pending to close,
+                        // before we could update, so update now
+                        Trades[trade_index].open_price = OrderOpenPrice();
+                        Trades[trade_index].open_time = OrderOpenTime();
+                        
+                        order_type = OrderType();
+                        if(order_type == OP_BUY) { Trades[trade_index].trade_operation = TO_BUY; }
+                        if(order_type == OP_SELL) { Trades[trade_index].trade_operation = TO_SELL; }
+                        Trades[trade_index].is_filled = true;
+                        PrintMsg(DebugLogHandle,StringFormat("order went from pending to close before update.. open price for the order ticket number %d = %f ",Trades[trade_index].ticket_number,Trades[trade_index].open_price));
+                        WriteTradeLog(Trades[trade_index]);
+                    }
+                }
+                else
+                {
+                    // order symbol mismatch
+                    PrintMsg(DebugLogHandle,StringFormat("Trade error, order does not have the same symbol as trade log, Log has %s, order has %s",Trades[trade_index].symbol,OrderSymbol()));
+                }  
+            }
+            else
+            {
+                // order could not be selected
+                PrintMsg(DebugLogHandle,StringFormat("Trade error, order could not be selected. OrderSelect returned the error of %s",GetLastError()));
+            }  
+        }
+        
+        if(Trades[trade_index].trade_state == TS_OPEN)
+        {
+            // operate on order, must 'select' it first
+            bool selected = OrderSelect(Trades[trade_index].ticket_number,SELECT_BY_TICKET);
+            if(selected)
+            {
+                // check the trade has the right symbol
+                if(OrderSymbol() == Instrs[instr_index].symbol)
+                {
+                    datetime close_time = OrderCloseTime();
+                    if(close_time == 0)
+                    {
+                        // order is open
+                        order_type = OrderType();
+                        if(order_type > 0 && (order_type == OP_BUY || order_type == OP_SELL))
+                        {
+                            // order is still open
+                            //Trades[trade_index].open_price = OrderOpenPrice();
+                            //Trades[trade_index].open_time = OrderOpenTime();
+                            //Trades[trade_index].volume = OrderLots();
+                            Trades[trade_index].stoploss = OrderStopLoss();
+                            Trades[trade_index].take_profit = OrderTakeProfit();
+                            Trades[trade_index].commission = OrderCommission();
+                            Trades[trade_index].swap = OrderSwap();
+                            Trades[trade_index].profit = OrderProfit();
+                            //Trades[trade_index].comment = OrderComment();
+                            //if(order_type == OP_BUY) { Trades[trade_index].trade_operation = TO_BUY; }
+                            //if(order_type == OP_SELL) { Trades[trade_index].trade_operation = TO_SELL; }
+                            //Trades[trade_index].is_filled = true;
+                            //Trades[trade_index].trade_state = TS_OPEN;
+                            //PrintMsg(DebugLogHandle,StringFormat("open price for the order ticket number %d = %f ",ticket_num,Trades[trade_index].open_price);
+                            
+                            // ***************************************** TODO
+                            // do we update the stop-loss in light of new ATR?
+                            WriteTradeLog(Trades[trade_index]);
+                            
+                        }
+                    }
+                    else
+                    {
+                        // order is now closed
+                        Trades[trade_index].close_price = OrderClosePrice();
+                        Trades[trade_index].close_time = OrderCloseTime();
+                        Trades[trade_index].volume = OrderLots();
+                        Trades[trade_index].stoploss = OrderStopLoss();
+                        Trades[trade_index].take_profit = OrderTakeProfit();
+                        Trades[trade_index].commission = OrderCommission();
+                        Trades[trade_index].swap = OrderSwap();
+                        Trades[trade_index].profit = OrderProfit();
+                        Trades[trade_index].comment = OrderComment();
+                        Trades[trade_index].trade_state = TS_CLOSED;
+                        PrintMsg(DebugLogHandle,StringFormat("close price for the order ticket number %d = %f ",Trades[trade_index].close_price));
+                        
+                        if(Trades[trade_index].trade_type == TT_LSMS) { Instrs[instr_index].lsms_trade = 0; }
+                        if(Trades[trade_index].trade_type == TT_LEWT) { Instrs[instr_index].lewt_trade = 0; }
+                        if(Trades[trade_index].trade_type == TT_SEWT) { Instrs[instr_index].sewt_trade = 0; }
+                        if(Trades[trade_index].trade_type == TT_SSMS) { Instrs[instr_index].ssms_trade = 0; }
+                        WriteTradeLog(Trades[trade_index]);
+                    }
+                }
+                else
+                {
+                    // order does not have the correct symbol
+                    PrintMsg(DebugLogHandle,StringFormat("Trade error, order does not have the sam symbol as trade log Log has %s, order has %s",Trades[trade_index].symbol,OrderSymbol()));
+                }  
+            }
+            else
+            {
+                // order could not be selected
+                PrintMsg(DebugLogHandle,StringFormat("Trade error, order could not be selected. OrderSelect returned the error of %d",GetLastError()));
+            }  
+        }
+        
+        if(Trades[trade_index].trade_state == TS_CLOSED)
+        {
+            PrintMsg(DebugLogHandle,"Trade error, Instrument still has closed trade attached. Setting to zero");
+            if(Trades[trade_index].trade_type == TT_LSMS) { Instrs[instr_index].lsms_trade = 0; }
+            if(Trades[trade_index].trade_type == TT_LEWT) { Instrs[instr_index].lewt_trade = 0; }
+            if(Trades[trade_index].trade_type == TT_SEWT) { Instrs[instr_index].sewt_trade = 0; }
+            if(Trades[trade_index].trade_type == TT_SSMS) { Instrs[instr_index].ssms_trade = 0; }
+            WriteTradeLog(Trades[trade_index]);
+        }
+        
+    }
+    else
+    {
+        PrintMsg(DebugLogHandle,"Trade error, Trade index could not be found (couldn't find trade in local list) or trade is set as INVALID (never populated)");
+    }
+    PrintMsg(DebugLogHandle,"CheckTrade returned");
 }
 /*------------------------------------------------------------------
  * Script program start function                                    
@@ -1256,90 +1518,149 @@ void OnStart()
     //BuildInstrumentList();
 
     ReadInstrsLog();
-    ReadTradeLog();
+    //ReadTradeLog();
+    ReadTradesList();
+    
 
-    
-//--- Check placed trades
-    CheckPlacedTrades();
-    
 //--- Calc LTCT    
 
-    for(int index=3; index<4; index++)
+    for(int instr_index=3; instr_index<4; instr_index++)
     {
         bool profit=false;
-        PrintMsg(DebugLogHandle,StringFormat("********** %s ***************************************************",Instrs[index].symbol));
-        if(CalculateLTCT(Instrs[index].symbol,profit))
+        PrintMsg(DebugLogHandle,StringFormat("********** %s ***************************************************",Instrs[instr_index].symbol));
+        if(CalculateLTCT(Instrs[instr_index].symbol,profit))
         {
             PrintMsg(DebugLogHandle,"CalculateLCTC return an error");
             return;
         }
-        //double lewt_value = -1;
-        //double sewt_value = -1;
-
-//--- Make new trades
-         bool made_trade = false;
-         double ewt_long = 0.0;
-         double sms_long = 0.0;
-         double ewt_short = 0.0;
-         double sms_short = 0.0;
-
-        if(!profit)
-        {
-            PrintMsg(DebugLogHandle,"OnStart: LTCT = loss, setting up EWT trades");
+        
+        double sms_long_price = 0.0;
+        double ewt_long_price = 0.0;
+        double ewt_short_price = 0.0;
+        double sms_short_price = 0.0;
+         
+        
+        
 //--- LEWT
-            ewt_long=MakeTrade(Instrs[index],LEWT);
-//--- SEWT        
-            ewt_short=MakeTrade(Instrs[index],SEWT);
+        int ticket_num = Instrs[instr_index].lewt_trade;
+        if(ticket_num > 0)
+        {
+            PrintMsg(DebugLogHandle,"OnStart: Checking LEWT trade");
+            int trade_index = GetTradeIndexFromTicketNumber(ticket_num);
+            CheckTrade(trade_index, instr_index);
+            ewt_long_price = Trades[trade_index].open_price;
         }
+        else
+        {
+            if(!profit)
+            {
+                PrintMsg(DebugLogHandle,"OnStart: Making LEWT trade");
+                // this is an empty trade
+                // make new trade if possible
+                ewt_long_price = MakeTrade(Instrs[instr_index],TT_LEWT);
+            }
+            else
+            {
+                PrintMsg(DebugLogHandle,"OnStart: Skipping LEWT trade, LTCT = profit");
+            }
+        }
+//--- SEWT        
+        ticket_num = Instrs[instr_index].sewt_trade;
+        if(ticket_num > 0)
+        {
+            PrintMsg(DebugLogHandle,"OnStart: Checking SEWT trade");
+            int trade_index = GetTradeIndexFromTicketNumber(ticket_num);
+            CheckTrade(trade_index, instr_index);
+            ewt_short_price = Trades[trade_index].open_price;
+        }
+        else
+        {
+            if(!profit)
+            {
+                PrintMsg(DebugLogHandle,"OnStart: Making SEWT trade");
+                // this is an empty trade
+                // make new trade if possible
+                ewt_short_price = MakeTrade(Instrs[instr_index],TT_SEWT);
+            }
+            else
+            {
+                PrintMsg(DebugLogHandle,"OnStart: Skipping SEWT trade, LTCT = profit");
+            }
+        }
+        
 //--- LSMS
-
-        // TODO compare ewt to sms values to decide whether to place trades for both
-        int lsms_index=iHighest(Instrs[index].symbol,PERIOD_D1,MODE_HIGH,CONST_SMS_PERIOD,0);
-         if(lsms_index>-1)
-         {
-             sms_long=iHigh(Instrs[index].symbol,PERIOD_D1,lsms_index);
-             if(sms_long>-1)
-             {
-               if(sms_long!=ewt_long)
+        // Only make trades for sms trades if ewt trades have different values
+        int lsms_index=iHighest(Instrs[instr_index].symbol,PERIOD_D1,MODE_HIGH,CONST_SMS_PERIOD,0);
+        if(lsms_index>-1)
+        {
+            sms_long_price=iHigh(Instrs[instr_index].symbol,PERIOD_D1,lsms_index);
+            if(sms_long_price>-1)
+            {
+               if(sms_long_price!=ewt_long_price)
                {
-                 sms_long=MakeTrade(Instrs[index],LSMS);
+                    ticket_num = Instrs[instr_index].lsms_trade;
+                    if(ticket_num > 0)
+                    {
+                        PrintMsg(DebugLogHandle,"OnStart: Checking LSMS trade");
+                        int trade_index = GetTradeIndexFromTicketNumber(ticket_num);
+                        CheckTrade(trade_index, instr_index);
+                        sms_long_price = Trades[trade_index].open_price;
+                    }
+                    else
+                    {
+                        PrintMsg(DebugLogHandle,"OnStart: Making LSMS trade");
+                        // this is an empty trade
+                        // make new trade if possible
+                        sms_long_price = MakeTrade(Instrs[instr_index],TT_LSMS);
+                    }
                }
                else
                {
-                  PrintMsg(DebugLogHandle,StringFormat("OnStart: Cannot make trade for LSMS in %s, sms_long %f == ewt_long %f",
-                           Instrs[index].symbol,sms_long,ewt_long));
+                  PrintMsg(DebugLogHandle,"OnStart: Skipping LSMS trade, LSMS = LEWT");
                }
-             }
-             else
-             {
-                 PrintMsg(DebugLogHandle,StringFormat("OnStart: Cannot make trade for LSMS in %s, sms_long = %f ewt_long = %f",
-                           Instrs[index].symbol,sms_long,ewt_long));
-             }
-         }
+            }
+            else
+            {
+                PrintMsg(DebugLogHandle,StringFormat("OnStart: Cannot make trade for LSMS in %s, sms_long_price = %f ewt_long_price = %f",
+                           Instrs[instr_index].symbol,sms_long_price,ewt_long_price));
+            }
+        }
 //--- SSMS
-         int ssms_index=iLowest(Instrs[index].symbol,PERIOD_D1,MODE_LOW,CONST_SMS_PERIOD,0);
-         if(ssms_index>-1)
-         {
-             sms_short=iHigh(Instrs[index].symbol,PERIOD_D1,ssms_index);
-             if(sms_short>-1)
-             {
-               if(sms_short!=ewt_short)
+        int ssms_index=iHighest(Instrs[instr_index].symbol,PERIOD_D1,MODE_HIGH,CONST_SMS_PERIOD,0);
+        if(ssms_index>-1)
+        {
+            sms_short_price=iHigh(Instrs[instr_index].symbol,PERIOD_D1,ssms_index);
+            if(sms_short_price>-1)
+            {
+               if(sms_short_price!=ewt_short_price)
                {
-                  sms_short=MakeTrade(Instrs[index],SSMS);
+                    ticket_num = Instrs[instr_index].ssms_trade;
+                    if(ticket_num > 0)
+                    {
+                        PrintMsg(DebugLogHandle,"OnStart: Checking SSMS trade");
+                        int trade_index = GetTradeIndexFromTicketNumber(ticket_num);
+                        CheckTrade(trade_index, instr_index);
+                        sms_short_price = Trades[trade_index].open_price;
+                    }
+                    else
+                    {
+                        PrintMsg(DebugLogHandle,"OnStart: Making SSMS trade");
+                        // this is an empty trade
+                        // make new trade if possible
+                        sms_short_price = MakeTrade(Instrs[instr_index],TT_SSMS);
+                    }
                }
                else
                {
-                  PrintMsg(DebugLogHandle,StringFormat("OnStart: Cannot make trade for SSMS in %s, sms_short  %f == ewt_short %f",
-                           Instrs[index].symbol,sms_short,ewt_short));
+                  PrintMsg(DebugLogHandle,"OnStart: Skipping SSMS trade, SSMS = SEWT");
                }
-
-             }
-             else
-             {
-                 PrintMsg(DebugLogHandle,StringFormat("OnStart: Cannot make trade for SSMS in %s, sms_short = %f ewt_short = %f",
-                           Instrs[index].symbol,sms_short,ewt_short));
-             }
-         }
+            }
+            else
+            {
+                PrintMsg(DebugLogHandle,StringFormat("OnStart: Cannot make trade for SSMS in %s, sms_short_price = %f ewt_short_price = %f",
+                           Instrs[instr_index].symbol,sms_short_price,ewt_short_price));
+            }
+        }
 
         if(false/*val > 6ATR*/)
         {
@@ -1347,7 +1668,8 @@ void OnStart()
         }
 
     }
-    WriteInstrsLog();
+    WriteInstrsList();
+    WriteTradesList();
     FileClose(TradeLogHandle);
     TradeLogHandle=-1;
   }
