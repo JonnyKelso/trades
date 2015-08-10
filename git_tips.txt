@@ -9,7 +9,7 @@ $ git add *
 $ git commit -m "Commit message"
 
 # Push local HEAD to remote repo:
-$ git push origin master     # (prompts for username jonnykelso and password speccy)
+$ git push origin master     # (prompts for username jonnykelso and password speccySP1!)
 
 
 # To update local repo to newest commit:
