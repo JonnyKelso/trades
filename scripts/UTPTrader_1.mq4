@@ -275,7 +275,7 @@ int WriteTradeLog(Trade &trade)
 
     if(TradeLogHandle==-1)
     {
-        TradeLogHandle=FileOpen(TradeLogFilename,FILE_CSV|FILE_WRITE|FILE_ANSI);
+        TradeLogHandle=FileOpen(TradeLogFilename,FILE_CSV|FILE_READ|FILE_WRITE|FILE_ANSI);
     }
     //ulong offset_bytes = FileSize(TradeLogHandle);
 
@@ -1354,6 +1354,9 @@ void CheckTrade(int trade_index, int instr_index)
                             // order is still pending 
                             // ATR will have changed, so recalc trade values
                             // delete and re-make order 
+                            PrintMsg(DebugLogHandle,StringFormat("Order with ticket number %d still pending, deleting and replacing trade",
+                                                                    Trades[trade_index].ticket_number));
+
                             bool deleted = OrderDelete(Trades[trade_index].ticket_number);
                             if(deleted)
                             {
@@ -1441,12 +1444,13 @@ void CheckTrade(int trade_index, int instr_index)
                             Trades[trade_index].swap = OrderSwap();
                             Trades[trade_index].profit = OrderProfit();
                             //Trades[trade_index].comment = OrderComment();
-                            //if(order_type == OP_BUY) { Trades[trade_index].trade_operation = TO_BUY; }
-                            //if(order_type == OP_SELL) { Trades[trade_index].trade_operation = TO_SELL; }
-                            //Trades[trade_index].is_filled = true;
-                            //Trades[trade_index].trade_state = TS_OPEN;
+                            if(order_type == OP_BUY) { Trades[trade_index].trade_operation = TO_BUY; }
+                            if(order_type == OP_SELL) { Trades[trade_index].trade_operation = TO_SELL; }
+                            Trades[trade_index].is_filled = true;
+                            Trades[trade_index].trade_state = TS_OPEN;
                             //PrintMsg(DebugLogHandle,StringFormat("open price for the order ticket number %d = %f ",ticket_num,Trades[trade_index].open_price);
-                            
+                            PrintMsg(DebugLogHandle,StringFormat("Order with ticket number %d still open",
+                                Trades[trade_index].ticket_number));
                             // ***************************************** TODO
                             // do we update the stop-loss in light of new ATR?
                             WriteTradeLog(Trades[trade_index]);
@@ -1511,6 +1515,17 @@ void CheckTrade(int trade_index, int instr_index)
 void OnStart()
   {
 //--- Open files
+
+    datetime date_time=TimeLocal();
+    int YY=TimeYear(date_time);
+    int MM=TimeMonth(date_time);
+    int DD=TimeDay(date_time);
+    int HH=TimeHour(date_time);
+    int MN=TimeMinute(date_time);
+    int  S=TimeSeconds(date_time);
+    string time_string=StringFormat("%04d-%02d-%02d_%02d-%02d-%02d",YY,MM,DD,HH,MN,S);
+            
+    DebugLogFilename=StringFormat("UTP_DebugLog_%s.csv",time_string);
     DebugLogHandle=FileOpen(DebugLogFilename,FILE_CSV|FILE_WRITE|FILE_ANSI);
     if(DebugLogHandle==-1){ return; }
 
@@ -1520,7 +1535,6 @@ void OnStart()
     ReadInstrsLog();
     //ReadTradeLog();
     ReadTradesList();
-    
 
 //--- Calc LTCT    
 
@@ -1672,5 +1686,8 @@ void OnStart()
     WriteTradesList();
     FileClose(TradeLogHandle);
     TradeLogHandle=-1;
+    FileClose(DebugLogHandle);
+    DebugLogHandle=-1;
+    
   }
 //+------------------------------------------------------------------+
