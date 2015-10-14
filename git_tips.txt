@@ -33,3 +33,6 @@ $ git config color.ui true
 # Git interactive adding:
 $ git add -i
 
+# undo last commit, before push
+$ git reset HEAD~1
+
