@@ -1305,13 +1305,24 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
     {
         //ex_rate=iClose(inst.base_currency_chart,PERIOD_D1,0);
         MqlTick tick;
-        SymbolInfoTick(inst.base_currency_chart,tick);
+        if(!SymbolInfoTick(inst.base_currency_chart,tick))
+        {
+            int error=GetLastError();
+            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: SymbolInfoTick failed with ERROR: [%d] description: [%s]",
+                                                error,ErrorDescription(error)));
+        }
          PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: inst.base_currency_chart = %s.",inst.base_currency_chart));
         PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: tick: tick.ask = %f.",tick.ask));
         PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: tick: tick.bid = %f.",tick.bid));
         PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: tick: tick.last = %f.",tick.last));
         PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: tick: tick.time = %f.",tick.time));
         double temp = iOpen(inst.symbol,PERIOD_D1,0);
+        if(temp == 0)
+        {
+            int error=GetLastError();
+            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: iOpen failed with ERROR: [%d] description: [%s]",
+                                                error,ErrorDescription(error)));
+        }
         PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: iOpen = %f",temp));
         if(ttype == TT_LEWT || ttype == TT_LSMS)
         {
@@ -1370,9 +1381,21 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
         int lsms_index=-1;
         double lsms_value=-1;
         lsms_index=iHighest(inst.symbol,PERIOD_D1,MODE_HIGH,CONST_SMS_PERIOD,0);
+        if(lsms_index == 0)
+        {
+            int error=GetLastError();
+            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: iHighest failed with ERROR: [%d] description: [%s]",
+                                                error,ErrorDescription(error)));
+        }
         if(lsms_index>-1)
         {
             lsms_value=iHigh(inst.symbol,PERIOD_D1,lsms_index);
+            if(lsms_value == 0)
+            {
+               int error=GetLastError();
+               PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: iHigh failed with ERROR: [%d] description: [%s]",
+                                                error,ErrorDescription(error)));
+            }
             if(lsms_value>-1)
             {
                 price=lsms_value;
@@ -1418,9 +1441,21 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
         int lewt_index=-1;
         double lewt_value=-1;
         lewt_index=iHighest(inst.symbol,PERIOD_D1,MODE_HIGH,CONST_EWT_PERIOD,0);
+        if(lewt_index == 0)
+        {
+            int error=GetLastError();
+            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: iHighest failed with ERROR: [%d] description: [%s]",
+                                                error,ErrorDescription(error)));
+        }
         if(lewt_index>-1)
         {
             lewt_value=iHigh(inst.symbol,PERIOD_D1,lewt_index);
+            if(lewt_value == 0)
+              {
+                  int error=GetLastError();
+                  PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: iHigh failed with ERROR: [%d] description: [%s]",
+                                                      error,ErrorDescription(error)));
+              }
             if(lewt_value>-1)
             {
                 price=lewt_value;
@@ -1432,7 +1467,7 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
                 PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[BUYSTOP],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
                                                 inst.symbol,Trade_size_MT4_rounded,price,stoploss,takeprofit,comment));
 
-                if(ticket<0)
+                if(ticket<=0)
                 {
                     int error=GetLastError();
                     PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s], ERROR placing trade: [%d] description: [%s]",
@@ -1467,9 +1502,21 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
         int sewt_index=-1;
         double sewt_value=-1;
         sewt_index=iLowest(inst.symbol,PERIOD_D1,MODE_LOW,CONST_EWT_PERIOD,0);
+        if(sewt_index == 0)
+        {
+            int error=GetLastError();
+            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: iLowest failed with ERROR: [%d] description: [%s]",
+                                                error,ErrorDescription(error)));
+        }
         if(sewt_index>-1)
         {
             sewt_value=iLow(inst.symbol,PERIOD_D1,sewt_index);
+            if(sewt_value == 0)
+              {
+                  int error=GetLastError();
+                  PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: iLow failed with ERROR: [%d] description: [%s]",
+                                                      error,ErrorDescription(error)));
+              }
             if(sewt_value>-1)
             {
                 price=sewt_value;
@@ -1482,7 +1529,7 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
                 PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[BUYSTOP],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
                                                 inst.symbol,Trade_size_MT4_rounded,price,stoploss,takeprofit,comment));
 
-                if(ticket<0)
+                if(ticket<=0)
                 {
                     int error=GetLastError();
                     PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s], ERROR placing trade: [%d] description: [%s]",
@@ -1516,9 +1563,21 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
         int ssms_index=-1;
         double ssms_value=-1;
         ssms_index=iLowest(inst.symbol,PERIOD_D1,MODE_LOW,CONST_SMS_PERIOD,0);
+        if(ssms_index == 0)
+        {
+            int error=GetLastError();
+            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: iLowest failed with ERROR: [%d] description: [%s]",
+                                                error,ErrorDescription(error)));
+        }
         if(ssms_index>-1)
         {
             ssms_value=iLow(inst.symbol,PERIOD_D1,ssms_index);
+            if(ssms_value == 0)
+              {
+                  int error=GetLastError();
+                  PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: iLow failed with ERROR: [%d] description: [%s]",
+                                                      error,ErrorDescription(error)));
+              }
             if(ssms_value>-1)
             {
                 price=ssms_value;
@@ -1531,7 +1590,7 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
                 PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[BUYSTOP],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
                                                 inst.symbol,Trade_size_MT4_rounded,price,stoploss,takeprofit,comment));
 
-                if(ticket<0)
+                if(ticket<=0)
                 {
                     int error=GetLastError();
                     PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s], ERROR placing trade: [%d] description: [%s]",
