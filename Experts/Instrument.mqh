@@ -22,7 +22,9 @@ public:
       ~Instrument();
       string AsString();
       void Clear();
-      void Copy(Instrument &other);                    
+      void Copy(Instrument &other);
+      int GetNumTrades();
+                          
       string symbol;
       string base_currency_chart;
       double min_trade_size;
@@ -116,4 +118,29 @@ void Instrument::Copy(Instrument &other)
    sewt_trade           = other.sewt_trade;
    ssms_trade           = other.ssms_trade;
 }
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+int Instrument::GetNumTrades()
+{
+   int num_trades = 0;
+   if(lsms_trade > 0)
+   {
+      num_trades++;
+   }
+   if(lewt_trade > 0)
+   {
+      num_trades++;
+   }
+   if(ssms_trade > 0)
+   {
+      num_trades++;
+   }
+   if(sewt_trade > 0)
+   {
+      num_trades++;
+   }
+   return num_trades;
+}
+//+------------------------------------------------------------------+
 //+------------------------------------------------------------------+

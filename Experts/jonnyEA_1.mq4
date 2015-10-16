@@ -20,6 +20,8 @@ const int CONST_SMS_PERIOD = 52;
 const int CONST_EWT_PERIOD = 21;
 const int CONST_NUM_SYMBOLS = 17;
 const int CONST_MAX_NUM_TRADES = 150;
+const int CONST_MAX_ALLOW_TRADES = 2;
+
 
 /* filenames and handles */
 string InstrsLogFilename= "UTP_InstrsLog.csv";
@@ -43,28 +45,36 @@ string point4_date = "";
 Instrument Instrs[17];
 Trade Trades[150]; // max number of trades is num_instruments x 4 (lewt,lsms,ssms,sewt)
 
+enum DebugLevel
+{
+    DB_OFF   = 0x0,
+    DB_LOW    = 0x1,
+    DB_MAX    = 0x2
+};
+const int CONST_DEBUG_LEVEL = DB_LOW;
+
 /* initialisation of instruments */
 /* not used in normal running, only used first time instruments are initialised */
-/*                   Symbol         Base        Minimum Lot     Pip         trade */
-/*                                  Currency    Trade   Size    Location    tickets */
+/*                   Symbol         Base        Minimum  Lot         Pip         trade */
+/*                                  Currency    Trade    Size        Location    tickets */
 /*                                  Chart       Size */
-Instrument instr01("EURUSD",       "GBPUSD",   0.01,   100000,   0.0001,     0,0,0,0);       //USD
-Instrument instr02("GBPUSD",       "GBPUSD",   0.01,   100000,   0.0001,     0,0,0,0);       //USD
-Instrument instr03("EURCHF",       "GBPCHF",   0.01,   100000,   0.0001,     0,0,0,0);       //CHF
-Instrument instr04("USDJPY",       "GBPJPY",0.01,100000,0.01,0,0,0,0);       //JPY
-Instrument instr05(".UK100",       "GBP",      0.01,   1,         1,          0,0,0,0);       //GBP
-Instrument instr06(".US500",       "GBPUSD",   0.01,   1,         1,          0,0,0,0);       //USD
-Instrument instr07("XAUUSD","GBPUSD",0.01,100,0.01,0,0,0,0);       //USD
-Instrument instr08("USCotton","GBPUSD",0.01,10000,0.01,0,0,0,0);       //USD
-Instrument instr09("USSugar","GBPUSD",0.01,10000,0.01,0,0,0,0);       //USD
-Instrument instr10("WTICrude","GBPUSD",0.01,100,0.01,0,0,0,0);       //USD
-Instrument instr11("NaturalGas","GBPUSD",0.01,1000,0.001,0,0,0,0);       //USD
-Instrument instr12("FACE","GBPUSD",1,1,0.01,0,0,0,0);       //USD
-Instrument instr13("GOOG","GBPUSD",1,1,0.01,0,0,0,0);       //USD
-Instrument instr14("MSFT",          "GBPUSD",   1,      1,         0.01,       0,0,0,0);       //USD
-Instrument instr15("TWTR",          "GBPUSD",   1,      1,         0.01,       0,0,0,0);       //USD
-Instrument instr16("USTNote","GBPUSD",1,100,0.01,0,0,0,0);       //USD
-Instrument instr17("YHOO","GBPUSD",1,1,0.01,0,0,0,0);       //USD
+Instrument instr01("EURUSD",        "GBPUSD",   0.01,    100000,     0.0001,     0,0,0,0);       //USD
+Instrument instr02("GBPUSD",        "GBPUSD",   0.01,    100000,     0.0001,     0,0,0,0);       //USD
+Instrument instr03("EURCHF",        "GBPCHF",   0.01,    100000,     0.0001,     0,0,0,0);       //CHF
+Instrument instr04("USDJPY",        "GBPJPY",   0.01,    100000,     0.01,       0,0,0,0);       //JPY
+Instrument instr05(".UK100",        "GBP",      0.01,    1,          1,          0,0,0,0);       //GBP
+Instrument instr06(".US500",        "GBPUSD",   0.01,    1,          1,          0,0,0,0);       //USD
+Instrument instr07("XAUUSD",        "GBPUSD",   0.01,    100,        0.01,       0,0,0,0);       //USD
+Instrument instr08("USCotton",      "GBPUSD",   0.01,    10000,      0.01,       0,0,0,0);       //USD
+Instrument instr09("USSugar",       "GBPUSD",   0.01,    10000,      0.01,       0,0,0,0);       //USD
+Instrument instr10("WTICrude",      "GBPUSD",   0.01,    100,        0.01,       0,0,0,0);       //USD
+Instrument instr11("NaturalGas",    "GBPUSD",   0.01,    1000,       0.001,      0,0,0,0);       //USD
+Instrument instr12("FACE",          "GBPUSD",   1,       1,          0.01,       0,0,0,0);       //USD
+Instrument instr13("GOOG",          "GBPUSD",   1,       1,          0.01,       0,0,0,0);       //USD
+Instrument instr14("MSFT",          "GBPUSD",   1,       1,          0.01,       0,0,0,0);       //USD
+Instrument instr15("TWTR",          "GBPUSD",   1,       1,          0.01,       0,0,0,0);       //USD
+Instrument instr16("USTNote",       "GBPUSD",   1,       100,        0.01,       0,0,0,0);       //USD
+Instrument instr17("YHOO",          "GBPUSD",   1,       1,          0.01,       0,0,0,0);       //USD
 
 int timer_count = 0;
 bool ran_today = false;
@@ -75,7 +85,7 @@ int OnInit()
   {
 //---
    // set timer to go off every hour
-   EventSetTimer(3600);
+   //EventSetTimer(3600);
 //---
    return(INIT_SUCCEEDED);
   }
@@ -85,8 +95,49 @@ int OnInit()
 void OnDeinit(const int reason)
   {
 //---
-   EventKillTimer();
+   //EventKillTimer();
   }
+  
+void OnTick()
+{
+    //---
+    //timer_count++;
+    
+    // get time now
+    datetime date_time=TimeLocal();
+    int YY=TimeYear(date_time);
+    int MM=TimeMonth(date_time);
+    int DD=TimeDay(date_time);
+    int HH=TimeHour(date_time);
+    int MN=TimeMinute(date_time);
+    int  S=TimeSeconds(date_time);
+    //string time_string=StringFormat("%04d-%02d-%02d_%02d-%02d-%02d",YY,MM,DD,HH,MN,S);
+    // is it time to run yet?
+    // only run once a day
+    if(HH == 13)
+    {
+        
+        if(MN == 01)
+        {
+            if(!ran_today)
+            {
+               string time_string=StringFormat("%04d-%02d-%02d_%02d-%02d-%02d",YY,MM,DD,HH,MN,S);
+               Print(StringFormat("Starting run, time = %s ***********************************************************************",time_string));
+               Start();
+               ran_today = true;
+            }
+        }
+    }
+    else
+    {
+        if(HH == 0) // midnight
+        {
+            ran_today = false;
+        }
+        //string time_string=StringFormat("%04d-%02d-%02d_%02d-%02d-%02d",YY,MM,DD,HH,MN,S);
+        //PrintMsg(DebugLogHandle,DB_MAX,StringFormat("Waiting for run time, time = %s, ran today? = %s",time_string,(ran_today ? "yes" : "no")));
+    }
+}
 //+------------------------------------------------------------------+
 //| Expert timer function                                             |
 //+------------------------------------------------------------------+
@@ -94,7 +145,8 @@ void OnTimer()
 {
     //---
     timer_count++;
-    
+    return;
+ /*
     // get time now
     datetime date_time=TimeLocal();
     int YY=TimeYear(date_time);
@@ -109,7 +161,7 @@ void OnTimer()
     if(HH == 13)
     {
         //string time_string=StringFormat("%04d-%02d-%02d_%02d-%02d-%02d",YY,MM,DD,HH,MN,S);
-        PrintMsg(DebugLogHandle,StringFormat("Starting run, time = %s",time_string));
+        PrintMsg(DebugLogHandle,DB_MAX,StringFormat("Starting run, time = %s",time_string));
         Start();
         ran_today = true;
     }
@@ -119,9 +171,10 @@ void OnTimer()
         {
             ran_today = false;
         }
-        PrintMsg(DebugLogHandle,StringFormat("Waiting for run time, time = %s, ran today? = %s",time_string,(ran_today ? "yes" : "no")));
-        
+        PrintMsg(DebugLogHandle,DB_MAX,StringFormat("Waiting for run time, time = %s, ran today? = %s",time_string,(ran_today ? "yes" : "no")));
+        Print("hello");
     }
+ */
 }
 
 /*------------------------------------------------------------------
@@ -129,6 +182,7 @@ void OnTimer()
  *------------------------------------------------------------------*/
 void Start()
 {
+   
    string time_now_str = GetTimeNow();
    DebugLogFilename=StringFormat("UTP_DebugLog_%s.csv",time_now_str);
    DebugLogHandle=FileOpen(DebugLogFilename,FILE_CSV|FILE_WRITE|FILE_ANSI);
@@ -144,10 +198,10 @@ void Start()
     for(int instr_index=3; instr_index<4; instr_index++)
     {
         bool profit=false;
-        PrintMsg(DebugLogHandle,StringFormat("********** %s ***************************************************",Instrs[instr_index].symbol));
+        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("********** %s ***************************************************",Instrs[instr_index].symbol));
         if(CalculateLTCT(Instrs[instr_index].symbol,profit))
         {
-            PrintMsg(DebugLogHandle,"CalculateLCTC return an error");
+            PrintMsg(DebugLogHandle,DB_LOW,"CalculateLCTC return an error");
             return;
         }
         
@@ -163,7 +217,7 @@ void Start()
         // do we already have a trade here?
         if(ticket_num > 0)
         {
-            PrintMsg(DebugLogHandle,"OnStart: Checking LEWT trade");
+            PrintMsg(DebugLogHandle,DB_LOW,"OnStart: Checking LEWT trade");
             int trade_index = GetTradeIndexFromTicketNumber(ticket_num);
             CheckTrade(trade_index, instr_index);
             ewt_long_price = Trades[trade_index].open_price;
@@ -174,14 +228,14 @@ void Start()
             if(!profit)
             {
                 // we're good ot go
-                PrintMsg(DebugLogHandle,"OnStart: Making LEWT trade");
+                PrintMsg(DebugLogHandle,DB_LOW,"OnStart: Making LEWT trade");
                 // this is an empty trade
                 // make new trade if possible
                 ewt_long_price = MakeTrade(Instrs[instr_index],TT_LEWT);
             }
             else
             {
-                PrintMsg(DebugLogHandle,"OnStart: Skipping LEWT trade, LTCT = profit");
+                PrintMsg(DebugLogHandle,DB_LOW,"OnStart: Skipping LEWT trade, LTCT = profit");
             }
         }
 //--- SEWT        
@@ -189,7 +243,7 @@ void Start()
         // do we already have a trade here?
         if(ticket_num > 0)
         {
-            PrintMsg(DebugLogHandle,"OnStart: Checking SEWT trade");
+            PrintMsg(DebugLogHandle,DB_LOW,"OnStart: Checking SEWT trade");
             int trade_index = GetTradeIndexFromTicketNumber(ticket_num);
             CheckTrade(trade_index, instr_index);
             ewt_short_price = Trades[trade_index].open_price;
@@ -199,14 +253,14 @@ void Start()
             // no current trade, what is LCTC?
             if(!profit)
             {
-                PrintMsg(DebugLogHandle,"OnStart: Making SEWT trade");
+                PrintMsg(DebugLogHandle,DB_LOW,"OnStart: Making SEWT trade");
                 // this is an empty trade
                 // make new trade if possible
                 ewt_short_price = MakeTrade(Instrs[instr_index],TT_SEWT);
             }
             else
             {
-                PrintMsg(DebugLogHandle,"OnStart: Skipping SEWT trade, LTCT = profit");
+                PrintMsg(DebugLogHandle,DB_LOW,"OnStart: Skipping SEWT trade, LTCT = profit");
             }
         }
         
@@ -224,14 +278,14 @@ void Start()
                     // do we already have a trade here?
                     if(ticket_num > 0)
                     {
-                        PrintMsg(DebugLogHandle,"OnStart: Checking LSMS trade");
+                        PrintMsg(DebugLogHandle,DB_LOW,"OnStart: Checking LSMS trade");
                         int trade_index = GetTradeIndexFromTicketNumber(ticket_num);
                         CheckTrade(trade_index, instr_index);
                         sms_long_price = Trades[trade_index].open_price;
                     }
                     else
                     {
-                        PrintMsg(DebugLogHandle,"OnStart: Making LSMS trade");
+                        PrintMsg(DebugLogHandle,DB_LOW,"OnStart: Making LSMS trade");
                         // this is an empty trade
                         // make new trade if possible
                         sms_long_price = MakeTrade(Instrs[instr_index],TT_LSMS);
@@ -239,12 +293,12 @@ void Start()
                }
                else
                {
-                  PrintMsg(DebugLogHandle,"OnStart: Skipping LSMS trade, LSMS = LEWT");
+                  PrintMsg(DebugLogHandle,DB_LOW,"OnStart: Skipping LSMS trade, LSMS = LEWT");
                }
             }
             else
             {
-                PrintMsg(DebugLogHandle,StringFormat("OnStart: Cannot make trade for LSMS in %s, sms_long_price = %f ewt_long_price = %f",
+                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("OnStart: Cannot make trade for LSMS in %s, sms_long_price = %f ewt_long_price = %f",
                            Instrs[instr_index].symbol,sms_long_price,ewt_long_price));
             }
         }
@@ -261,14 +315,14 @@ void Start()
                     // do we already have a trade here?
                     if(ticket_num > 0)
                     {
-                        PrintMsg(DebugLogHandle,"OnStart: Checking SSMS trade");
+                        PrintMsg(DebugLogHandle,DB_LOW,"OnStart: Checking SSMS trade");
                         int trade_index = GetTradeIndexFromTicketNumber(ticket_num);
                         CheckTrade(trade_index, instr_index);
                         sms_short_price = Trades[trade_index].open_price;
                     }
                     else
                     {
-                        PrintMsg(DebugLogHandle,"OnStart: Making SSMS trade");
+                        PrintMsg(DebugLogHandle,DB_LOW,"OnStart: Making SSMS trade");
                         // this is an empty trade
                         // make new trade if possible
                         sms_short_price = MakeTrade(Instrs[instr_index],TT_SSMS);
@@ -276,12 +330,12 @@ void Start()
                }
                else
                {
-                  PrintMsg(DebugLogHandle,"OnStart: Skipping SSMS trade, SSMS = SEWT");
+                  PrintMsg(DebugLogHandle,DB_LOW,"OnStart: Skipping SSMS trade, SSMS = SEWT");
                }
             }
             else
             {
-                PrintMsg(DebugLogHandle,StringFormat("OnStart: Cannot make trade for SSMS in %s, sms_short_price = %f ewt_short_price = %f",
+                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("OnStart: Cannot make trade for SSMS in %s, sms_short_price = %f ewt_short_price = %f",
                            Instrs[instr_index].symbol,sms_short_price,ewt_short_price));
             }
         }
@@ -317,20 +371,22 @@ string GetTimeNow()
 
 /*--------------------------------------------------------------------------------------------------------------------*/
 /* A wrapper for FileWriteString that checks the file handle is valid and appends a \n to the string */
-void PrintMsg(int hndl,string msg)
+void PrintMsg(int hndl,DebugLevel level,string msg)
 {
-   Print(msg);
-   if(hndl>-1)
-   {
-      msg=msg+"\n";
-      FileWriteString(hndl,msg,256);
-      
-   }
+    if(level <= CONST_DEBUG_LEVEL)
+    {
+        Print(msg);
+        if(hndl>-1)
+        {
+            msg=msg+"\n";
+            FileWriteString(hndl,msg,256);
+        }
+    }
 }
 
 void BuildInstrumentList()
 {
-   PrintMsg(DebugLogHandle,"BuildInstrumentList called");
+   PrintMsg(DebugLogHandle,DB_MAX,"BuildInstrumentList called");
    /*
    InstrumentCopy(Instrs[0],instr01);
    InstrumentCopy(Instrs[1],instr02);
@@ -367,7 +423,7 @@ void BuildInstrumentList()
    Instrs[14].Copy(instr15);
    Instrs[15].Copy(instr16);
    Instrs[16].Copy(instr17);
-   PrintMsg(DebugLogHandle,"BuildInstrumentList returned");
+   PrintMsg(DebugLogHandle,DB_MAX,"BuildInstrumentList returned");
 
 }
 
@@ -388,7 +444,7 @@ void InstrumentCopy(Instrument &a,Instrument &b)
 /* Populate the Instrs array of instruments from file */
 int ReadInstrsLog()
   {
-   PrintMsg(DebugLogHandle,"ReadInstrsLog called");
+   PrintMsg(DebugLogHandle,DB_MAX,"ReadInstrsLog called");
    InstrsLogHandle= -1;
    InstrsLogHandle=FileOpen(InstrsLogFilename,FILE_CSV|FILE_READ);
    if(InstrsLogHandle>-1)
@@ -416,7 +472,7 @@ int ReadInstrsLog()
                Instrs[index].sewt_trade = (int)StringToInteger(strings[7]);
                Instrs[index].ssms_trade = (int)StringToInteger(strings[8]);
 
-               PrintMsg(DebugLogHandle,StringFormat("Instrs[%d]=%s",index,Instrs[index].AsString()));
+               PrintMsg(DebugLogHandle,DB_MAX,StringFormat("Instrs[%d]=%s",index,Instrs[index].AsString()));
 
               }
            }
@@ -427,9 +483,9 @@ int ReadInstrsLog()
      }
    else
      {
-      PrintMsg(DebugLogHandle,"ReadInstrsLog - Invalid file handle passed");
+      PrintMsg(DebugLogHandle,DB_LOW,"ReadInstrsLog - Invalid file handle passed");
      }
-   PrintMsg(DebugLogHandle,"ReadInstrsLog returned");
+   PrintMsg(DebugLogHandle,DB_MAX,"ReadInstrsLog returned");
    return 0;
   }
 
@@ -437,7 +493,7 @@ int ReadInstrsLog()
 /* Write Instrs array to file */
 int WriteInstrsList()
 {
-    PrintMsg(DebugLogHandle,"WriteInstrsList called");
+    PrintMsg(DebugLogHandle,DB_MAX,"WriteInstrsList called");
     if(InstrsLogHandle>-1)
     {
         FileClose(InstrsLogHandle);
@@ -453,7 +509,7 @@ int WriteInstrsList()
     FileClose(InstrsLogHandle);
     InstrsLogHandle=-1;
 
-    PrintMsg(DebugLogHandle,"WriteInstrsList returned");
+    PrintMsg(DebugLogHandle,DB_MAX,"WriteInstrsList returned");
     return 0;
 }
 
@@ -461,7 +517,7 @@ int WriteInstrsList()
 /* Read the trades list */
 int ReadTradesList()
 {
-    PrintMsg(DebugLogHandle,"ReadTradesList called");
+    PrintMsg(DebugLogHandle,DB_MAX,"ReadTradesList called");
     TradesListHandle= -1;
     TradesListHandle=FileOpen(TradesListFilename,FILE_CSV|FILE_READ);
     if(TradesListHandle>-1)
@@ -492,27 +548,27 @@ int ReadTradesList()
                 Trades[index].magic_number = StringToDouble(strings[12]);
                 Trades[index].expiration_date = StringToTime(strings[13]);
                 Trades[index].comment = strings[14];
-                PrintMsg(DebugLogHandle,StringFormat("trade type ==== %s",strings[15]));
+                PrintMsg(DebugLogHandle,DB_MAX,StringFormat("trade type ==== %s",strings[15]));
                 Trades[index].SetTradeType(StringFormat("%s",strings[15]));
-                PrintMsg(DebugLogHandle,StringFormat("trade op ==== %s",strings[16]));
+                PrintMsg(DebugLogHandle,DB_MAX,StringFormat("trade op ==== %s",strings[16]));
                 Trades[index].SetTradeOperation(StringFormat("%s",strings[16]));
-                PrintMsg(DebugLogHandle,StringFormat("filled ==== %s",strings[17]));
+                PrintMsg(DebugLogHandle,DB_MAX,StringFormat("filled ==== %s",strings[17]));
                 Trades[index].SetIsFilled(StringFormat("%s",strings[17]));
-                PrintMsg(DebugLogHandle,StringFormat("trade state ==== %s",strings[18]));
+                PrintMsg(DebugLogHandle,DB_MAX,StringFormat("trade state ==== %s",strings[18]));
                 Trades[index].SetTradeState(StringFormat("%s",strings[18]));
                 
-                PrintMsg(DebugLogHandle,StringFormat("ReadTradesList: Trades[%d]=%s",index,Trades[index].AsString()));            
+                PrintMsg(DebugLogHandle,DB_MAX,StringFormat("ReadTradesList: Trades[%d]=%s",index,Trades[index].AsString()));            
             }
             index++;
         }
     }
     else
     {
-        PrintMsg(DebugLogHandle,"ReadTradesList - Invalid file handle passed");
+        PrintMsg(DebugLogHandle,DB_LOW,"ReadTradesList - Invalid file handle passed");
     }
     FileClose(TradesListHandle);
     TradesListHandle=-1;
-    PrintMsg(DebugLogHandle,"ReadTradesList returned");
+    PrintMsg(DebugLogHandle,DB_MAX,"ReadTradesList returned");
 
     return 0;
 }
@@ -520,7 +576,7 @@ int ReadTradesList()
 /* Write (append) a Trade to the trade log */
 int WriteTradeLog(Trade &trade)
 {
-    PrintMsg(DebugLogHandle,StringFormat("WriteTradeLog called with trade = %s",trade.AsString()));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("WriteTradeLog called with trade = %s",trade.AsString()));
 
     if(TradeLogHandle==-1)
     {
@@ -533,7 +589,7 @@ int WriteTradeLog(Trade &trade)
     //FileClose(TradeLogHandle);
     //TradeLogHandle = -1;
 
-    PrintMsg(DebugLogHandle,"WriteTradeLog returned");
+    PrintMsg(DebugLogHandle,DB_MAX,"WriteTradeLog returned");
 
     return 0;
 }
@@ -541,7 +597,7 @@ int WriteTradeLog(Trade &trade)
 /* Write Trades array to file */
 int WriteTradesList()
 {
-    PrintMsg(DebugLogHandle,"WriteTradesList called");
+    PrintMsg(DebugLogHandle,DB_MAX,"WriteTradesList called");
     if(TradesListHandle>-1)
     {
         FileClose(TradesListHandle);
@@ -563,14 +619,14 @@ int WriteTradesList()
     FileClose(TradesListHandle);
     TradesListHandle=-1;
 
-    PrintMsg(DebugLogHandle,"WriteTradesList returned");
+    PrintMsg(DebugLogHandle,DB_MAX,"WriteTradesList returned");
     return 0;
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
 /* Calculate the LTCT, determining the four LTCT points and ultimately whether the LTCT is profit or not */
 int CalculateLTCT(string symbol,bool &profit)
 {
-    PrintMsg(DebugLogHandle,StringFormat("CalculateLTCT called with %s",symbol));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("CalculateLTCT called with %s",symbol));
 
     int error_status=0;
     profit=false;
@@ -634,7 +690,7 @@ int CalculateLTCT(string symbol,bool &profit)
     }
     else
     {
-        PrintMsg(DebugLogHandle,"Error - Couldn't find both recent EWT touches");
+        PrintMsg(DebugLogHandle,DB_LOW,"Error - Couldn't find both recent EWT touches");
         error_status=1;
         return error_status;
     }
@@ -680,7 +736,7 @@ int CalculateLTCT(string symbol,bool &profit)
             MN=TimeMonth(date_time); // Month         
             DD=TimeDay(date_time);   // Day
             HH=TimeHour(date_time);  // Hour
-            PrintMsg(DebugLogHandle,StringFormat("Next low ewt touch: bar=%d Date=%d-%d_%d",sewt_index,MN,DD,HH));
+            PrintMsg(DebugLogHandle,DB_MAX,StringFormat("Next low ewt touch: bar=%d Date=%d-%d_%d",sewt_index,MN,DD,HH));
             point4_date=StringFormat("%2dM-%2dD_%2dH",MN,DD,HH);
             // we would have entered LONG at direction change in high, and exited at next ewt touch on opposite side
             // is there profit?
@@ -704,7 +760,7 @@ int CalculateLTCT(string symbol,bool &profit)
             MN=TimeMonth(date_time); // Month         
             DD=TimeDay(date_time);   // Day
             HH=TimeHour(date_time);  // Hour
-            PrintMsg(DebugLogHandle,StringFormat("Next low ewt touch: bar=%d Date=%d-%d_%d",lewt_index,MN,DD,HH));
+            PrintMsg(DebugLogHandle,DB_MAX,StringFormat("Next low ewt touch: bar=%d Date=%d-%d_%d",lewt_index,MN,DD,HH));
             point4_date=StringFormat("%2dM-%2dD_%2dH",MN,DD,HH);
             // we would have entered SHORT at direction change in low, and exited at next ewt touch on opposite side
             // is there profit?
@@ -719,16 +775,16 @@ int CalculateLTCT(string symbol,bool &profit)
                 profit=false;
             }
         }
-        PrintMsg(DebugLogHandle,StringFormat("Point 1 = %s",point1_date));
-        PrintMsg(DebugLogHandle,StringFormat("Point 2 = %s",point2_date));
-        PrintMsg(DebugLogHandle,StringFormat("Point 3 = %s",point3_date));
-        PrintMsg(DebugLogHandle,StringFormat("Point 4 = %s",point4_date));
-        PrintMsg(DebugLogHandle,StringFormat("%s LTCT is in %s",symbol,(profit ? "PROFIT" : "LOSS")));
+        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("Point 1 = %s",point1_date));
+        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("Point 2 = %s",point2_date));
+        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("Point 3 = %s",point3_date));
+        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("Point 4 = %s",point4_date));
+        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("%s LTCT is in %s",symbol,(profit ? "PROFIT" : "LOSS")));
 
     }
     else
     {
-        PrintMsg(DebugLogHandle,"Couldn't detect direction change");
+        PrintMsg(DebugLogHandle,DB_MAX,"Couldn't detect direction change");
     }
 
     return 0;
@@ -738,7 +794,7 @@ int CalculateLTCT(string symbol,bool &profit)
 /* Must specify symbol, high (long) or low (short), and the start index*/
 int GetEWTIndexFromIndex(string symb,int start_index,int HighLow)
 {
-    PrintMsg(DebugLogHandle,StringFormat("GetEWTIndexFromIndex called with\n symbol=%s\n start_index=%d\n HighLow=%d",symb,start_index,HighLow));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("GetEWTIndexFromIndex called with\n symbol=%s\n start_index=%d\n HighLow=%d",symb,start_index,HighLow));
 
     int ewt_index=-1;
     if(HighLow==1)
@@ -749,7 +805,7 @@ int GetEWTIndexFromIndex(string symb,int start_index,int HighLow)
     {
         ewt_index=iLowest(symb,PERIOD_D1,MODE_LOW,CONST_EWT_PERIOD,start_index);
     }
-    PrintMsg(DebugLogHandle,StringFormat("GetEWTIndexFromIndex returned with\n ewt_index=%d",ewt_index));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("GetEWTIndexFromIndex returned with\n ewt_index=%d",ewt_index));
 
     return ewt_index;
 }
@@ -762,9 +818,9 @@ double EWTValueAtIndex(string symbol,int start_index,int IsHigh)
     int MN=TimeMonth(date_time); // Month         
     int DD=TimeDay(date_time);   // Day
     int HH=TimeHour(date_time);  // Hour
-    //PrintMsg(DebugLogHandle,StringFormat("Found a touch on low: bar=%d\n Date=%d-%d_%d",bar,MN,DD,HH));
+    //PrintMsg(DebugLogHandle,DB_MAX,StringFormat("Found a touch on low: bar=%d\n Date=%d-%d_%d",bar,MN,DD,HH));
 
-    PrintMsg(DebugLogHandle,StringFormat("EWTValueAtIndex called with %s, point 2=%d, Date=%d-%d_%d, Ishigh=%d",symbol,start_index,MN,DD,HH,IsHigh));
+    // debug PrintMsg(DebugLogHandle,DB_MAX,StringFormat("EWTValueAtIndex called with %s, point 2=%d, Date=%d-%d_%d, Ishigh=%d",symbol,start_index,MN,DD,HH,IsHigh));
 
     int ewt_index=-1;
     double ewt_value=0.0;
@@ -779,7 +835,7 @@ double EWTValueAtIndex(string symbol,int start_index,int IsHigh)
         ewt_index = iLowest(symbol,PERIOD_D1,MODE_LOW,CONST_EWT_PERIOD,start_index);
         ewt_value = iLow(symbol,PERIOD_D1,ewt_index);
     }
-    //PrintMsg(DebugLogHandle,StringFormat("EWTValueAtIndex returned ewt_value=%d",ewt_value));
+    //PrintMsg(DebugLogHandle,DB_MAX,StringFormat("EWTValueAtIndex returned ewt_value=%d",ewt_value));
 
     return ewt_value;
 }
@@ -787,7 +843,7 @@ double EWTValueAtIndex(string symbol,int start_index,int IsHigh)
 /* Populate the arrays of high and low EWT values*/
 void CalculateEWTValues(string symbol)
 {
-    PrintMsg(DebugLogHandle,StringFormat("CalculateEWTValues called with symbol %s",symbol));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("CalculateEWTValues called with symbol %s",symbol));
 
     string highs= "";
     for(int bar = 0; bar<365; bar++)
@@ -800,7 +856,7 @@ void CalculateEWTValues(string symbol)
             highs+=StringFormat("[%d,%d]",bar,ewt_index);
         }
     }
-    PrintMsg(DebugLogHandle,StringFormat("CalculateEWTValues Highs = %s",highs));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("CalculateEWTValues Highs = %s",highs));
 
     string lows = "";
     for(int bar = 0; bar < 365; bar++)
@@ -813,16 +869,16 @@ void CalculateEWTValues(string symbol)
             lows+=StringFormat("[%d,%d]",bar,ewt_index);
         }
     }
-    PrintMsg(DebugLogHandle,StringFormat("CalculateEWTValues Lows = %s",lows));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("CalculateEWTValues Lows = %s",lows));
 
-    PrintMsg(DebugLogHandle,"CalculateEWTValues returned");
+    PrintMsg(DebugLogHandle,DB_MAX,"CalculateEWTValues returned");
 
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
 /* Return the indexes (bars) of the most recent (back in time) high and low EWt touches from a given symbol and start index */
 void MostRecentEWTTouches(string symbol,int start_index,int &lewt_index,int &sewt_index)
 {
-    PrintMsg(DebugLogHandle,StringFormat("MostRecentEWTTouches called with\n symbol=%s\n start_index=%d\n lewt_index=%d, sewt_index=%d",symbol,start_index,lewt_index,sewt_index));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("MostRecentEWTTouches called with\n symbol=%s\n start_index=%d\n lewt_index=%d, sewt_index=%d",symbol,start_index,lewt_index,sewt_index));
 
     // find most recent touch in highs
     string high_touches="high_touches:\n";
@@ -843,10 +899,10 @@ void MostRecentEWTTouches(string symbol,int start_index,int &lewt_index,int &sew
             int MN=TimeMonth(date_time); // Month         
             int DD=TimeDay(date_time);   // Day
             int HH=TimeHour(date_time);  // Hour
-            PrintMsg(DebugLogHandle,StringFormat("Found a touch on high: bar=%d\n Date=%d-%d_%d",bar,MN,DD,HH));
+            PrintMsg(DebugLogHandle,DB_MAX,StringFormat("Found a touch on high: bar=%d\n Date=%d-%d_%d",bar,MN,DD,HH));
             break;
         }
-        PrintMsg(DebugLogHandle,high_touches);
+        PrintMsg(DebugLogHandle,DB_MAX,high_touches);
     }
     string low_touches="low_touches:\n";
     // find most recent touch in lows
@@ -867,20 +923,20 @@ void MostRecentEWTTouches(string symbol,int start_index,int &lewt_index,int &sew
             int MN=TimeMonth(date_time); // Month         
             int DD=TimeDay(date_time);   // Day
             int HH=TimeHour(date_time);  // Hour
-            PrintMsg(DebugLogHandle,StringFormat("Found a touch on low: bar=%d\n Date=%d-%d_%d",bar,MN,DD,HH));
+            PrintMsg(DebugLogHandle,DB_MAX,StringFormat("Found a touch on low: bar=%d\n Date=%d-%d_%d",bar,MN,DD,HH));
             break;
         }
-        PrintMsg(DebugLogHandle,high_touches);
+        PrintMsg(DebugLogHandle,DB_MAX,high_touches);
     }
 
-    PrintMsg(DebugLogHandle,StringFormat("MostRecentEWTTouches returned with\n lewt_index=%d, sewt_index=%d",lewt_index,sewt_index));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("MostRecentEWTTouches returned with\n lewt_index=%d, sewt_index=%d",lewt_index,sewt_index));
 
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
 /*  Returns the next (forward in time) touches of the EWT indicator from a given index on a given symbol*/
 void NextEWTTouchesForward(string symbol,int start_index,int &lewt_index,int &sewt_index)
 {
-    PrintMsg(DebugLogHandle,StringFormat("NextEWTTouchesForward called with\n symbol=%s\n start_index=%d\n lewt_index=%d, sewt_index=%d",symbol,start_index,lewt_index,sewt_index));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("NextEWTTouchesForward called with\n symbol=%s\n start_index=%d\n lewt_index=%d, sewt_index=%d",symbol,start_index,lewt_index,sewt_index));
     // find most recent index in either high or lows where value = EWT value
     if(start_index<=0)
     {
@@ -903,7 +959,7 @@ void NextEWTTouchesForward(string symbol,int start_index,int &lewt_index,int &se
             int MN=TimeMonth(date_time); // Month         
             int DD=TimeDay(date_time);   // Day
             int HH=TimeHour(date_time);  // Hour
-            PrintMsg(DebugLogHandle,StringFormat("Found a touch on high: bar=%d\n Date=%d-%d_%d",bar,MN,DD,HH));
+            PrintMsg(DebugLogHandle,DB_MAX,StringFormat("Found a touch on high: bar=%d\n Date=%d-%d_%d",bar,MN,DD,HH));
             break;
         }
     }
@@ -923,11 +979,11 @@ void NextEWTTouchesForward(string symbol,int start_index,int &lewt_index,int &se
             int MN=TimeMonth(date_time); // Month         
             int DD=TimeDay(date_time);   // Day
             int HH=TimeHour(date_time);  // Hour
-            PrintMsg(DebugLogHandle,StringFormat("Found a touch on low: bar=%d\n Date=%d-%d_%d",bar,MN,DD,HH));
+            PrintMsg(DebugLogHandle,DB_MAX,StringFormat("Found a touch on low: bar=%d\n Date=%d-%d_%d",bar,MN,DD,HH));
             break;
         }
     }
-    PrintMsg(DebugLogHandle,StringFormat("NextEWTTouchesForward returned with\n lewt_index=%d, sewt_index=%d",lewt_index,sewt_index));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("NextEWTTouchesForward returned with\n lewt_index=%d, sewt_index=%d",lewt_index,sewt_index));
 
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
@@ -940,14 +996,13 @@ int FindIndexOfDirectionChangefromIndex(string symbol,int index,int IsHigh)
     int MN=TimeMonth(date_time); // Month         
     int DD=TimeDay(date_time);   // Day
     int HH=TimeHour(date_time);  // Hour
-    //PrintMsg(DebugLogHandle,StringFormat("Found a touch on low: bar=%d\n Date=%d-%d_%d",bar,MN,DD,HH));
 
-    PrintMsg(DebugLogHandle,StringFormat("FindIndexOfDirectionChangefromIndex called with %s, point 2=%d, Date=%d-%d_%d, Ishigh=%d",symbol,index,MN,DD,HH,IsHigh));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("FindIndexOfDirectionChangefromIndex called with %s, point 2=%d, Date=%d-%d_%d, Ishigh=%d",symbol,index,MN,DD,HH,IsHigh));
     bool dir_change=false;
     int index_of_change=-1;
     if(IsHigh)
     {
-        PrintMsg(DebugLogHandle,"Finding direction change of high touch");
+        PrintMsg(DebugLogHandle,DB_MAX,"Finding direction change of high touch");
 
         // High
         // Get value of current touch
@@ -960,16 +1015,16 @@ int FindIndexOfDirectionChangefromIndex(string symbol,int index,int IsHigh)
             current_index++;
             prev_val=val;
             val=EWTValueAtIndex(symbol,current_index,IsHigh);
-            PrintMsg(DebugLogHandle,StringFormat("Is High = true, Traversing back through value %f at index %d, (prev=%f)",val,current_index,prev_val));
+            PrintMsg(DebugLogHandle,DB_MAX,StringFormat("Is High = true, Traversing back through value %f at index %d, (prev=%f)",val,current_index,prev_val));
             if(val>prev_val)
             {
-                PrintMsg(DebugLogHandle,"Trend on high is downwards");
+                // debug PrintMsg(DebugLogHandle,DB_MAX,"Trend on high is downwards");
                 // trend is downward - can this even happen??
                 // Does this mean that this point is the change of direction?
             }
             else if(val<prev_val)
             {
-                PrintMsg(DebugLogHandle,"Trend on high is upwards");
+                PrintMsg(DebugLogHandle,DB_MAX,"Trend on high is upwards");
                 // trend is upward
                 // find when direction changed, looking back from here.
                 // values on same trend will be < this value, find next > value
@@ -984,14 +1039,14 @@ int FindIndexOfDirectionChangefromIndex(string symbol,int index,int IsHigh)
                     MN=TimeMonth(date_time); // Month         
                     DD=TimeDay(date_time);   // Day
                     HH=TimeHour(date_time);  // Hour
-                    PrintMsg(DebugLogHandle,StringFormat("debug current val = %f prev val = %f, current_index %d, Date=%d-%d_%d",val,prev_val,current_index,MN,DD,HH));
+                    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("debug current val = %f prev val = %f, current_index %d, Date=%d-%d_%d",val,prev_val,current_index,MN,DD,HH));
                     if(val>prev_val)
                     {
                         date_time=iTime(symbol,PERIOD_D1,current_index);
                         MN=TimeMonth(date_time); // Month         
                         DD=TimeDay(date_time);   // Day
                         HH=TimeHour(date_time);  // Hour
-                        PrintMsg(DebugLogHandle,StringFormat("Found 1st direction change at index %d, Date=%d-%d_%d, val=%f,now reversing",current_index,MN,DD,HH,val));
+                        PrintMsg(DebugLogHandle,DB_MAX,StringFormat("Found 1st direction change at index %d, Date=%d-%d_%d, val=%f,now reversing",current_index,MN,DD,HH,val));
                         // found direction change, now reverse and find first upward breakout
 
                         while(!dir_change)
@@ -1006,7 +1061,7 @@ int FindIndexOfDirectionChangefromIndex(string symbol,int index,int IsHigh)
                                 MN=TimeMonth(date_time); // Month         
                                 DD=TimeDay(date_time);   // Day
                                 HH=TimeHour(date_time);  // Hour
-                                PrintMsg(DebugLogHandle,StringFormat("Found 2nd direction change at index %d, Date=%d-%d_%d",current_index,MN,DD,HH));
+                                PrintMsg(DebugLogHandle,DB_MAX,StringFormat("Found 2nd direction change at index %d, Date=%d-%d_%d",current_index,MN,DD,HH));
 
                                 // THIS IS POINT 3*****************
                                 index_of_change=current_index;
@@ -1025,7 +1080,7 @@ int FindIndexOfDirectionChangefromIndex(string symbol,int index,int IsHigh)
     }
     else
     {
-        PrintMsg(DebugLogHandle,"Finding direction change of low touch");
+        PrintMsg(DebugLogHandle,DB_MAX,"Finding direction change of low touch");
 
         // Low
         // Get value of current touch
@@ -1038,10 +1093,10 @@ int FindIndexOfDirectionChangefromIndex(string symbol,int index,int IsHigh)
             current_index++;
             prev_val=val;
             val=EWTValueAtIndex(symbol,current_index,IsHigh);
-            PrintMsg(DebugLogHandle,StringFormat("Is High = false, Traversing back through value %f at index %d, (prev=%f)",val,current_index,prev_val));
+            PrintMsg(DebugLogHandle,DB_MAX,StringFormat("Is High = false, Traversing back through value %f at index %d, (prev=%f)",val,current_index,prev_val));
             if(val>prev_val)
             {
-                PrintMsg(DebugLogHandle,"Trend on low is downwards");
+                PrintMsg(DebugLogHandle,DB_MAX,"Trend on low is downwards");
                 // trend is upward
                 // find when direction changed, looking back from here.
                 // values on same trend will be > this value, find next < value
@@ -1058,7 +1113,7 @@ int FindIndexOfDirectionChangefromIndex(string symbol,int index,int IsHigh)
                         MN=TimeMonth(date_time); // Month         
                         DD=TimeDay(date_time);   // Day
                         HH=TimeHour(date_time);  // Hour
-                        PrintMsg(DebugLogHandle,StringFormat("Found 1st direction change at index %d, Date=%d-%d_%d, val=%f,now reversing",current_index,MN,DD,HH,val));
+                        PrintMsg(DebugLogHandle,DB_MAX,StringFormat("Found 1st direction change at index %d, Date=%d-%d_%d, val=%f,now reversing",current_index,MN,DD,HH,val));
                         // found direction change, now reverse and find first upward breakout
 
                         while(!dir_change)
@@ -1073,7 +1128,7 @@ int FindIndexOfDirectionChangefromIndex(string symbol,int index,int IsHigh)
                                 MN=TimeMonth(date_time); // Month         
                                 DD=TimeDay(date_time);   // Day
                                 HH=TimeHour(date_time);  // Hour
-                                PrintMsg(DebugLogHandle,StringFormat("Found 2nd direction change at index %d, Date=%d-%d_%d",current_index,MN,DD,HH));
+                                PrintMsg(DebugLogHandle,DB_MAX,StringFormat("Found 2nd direction change at index %d, Date=%d-%d_%d",current_index,MN,DD,HH));
 
                                 // THIS IS POINT 3*****************
                                 index_of_change=current_index;
@@ -1086,7 +1141,7 @@ int FindIndexOfDirectionChangefromIndex(string symbol,int index,int IsHigh)
             }
             else if(val<prev_val)
             {
-                PrintMsg(DebugLogHandle,"Trend on low is upwards");
+                PrintMsg(DebugLogHandle,DB_MAX,"Trend on low is upwards");
                 // trend is downward - can this even happen??
                 // Does this mean that this point is the change of direction?
             }
@@ -1097,7 +1152,7 @@ int FindIndexOfDirectionChangefromIndex(string symbol,int index,int IsHigh)
             }
         }
     }
-    PrintMsg(DebugLogHandle,StringFormat("FindIndexOfDirectionChangefromIndex returned index %f, Date=%d-%d_%d",index_of_change,MN,DD,HH));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("FindIndexOfDirectionChangefromIndex returned index %f, Date=%d-%d_%d",index_of_change,MN,DD,HH));
     return index_of_change;
 }/*--------------------------------------------------------------------------------------------------------------------*/
 /* For the given instrument details, calculate a new stop loss. 
@@ -1105,7 +1160,7 @@ int FindIndexOfDirectionChangefromIndex(string symbol,int index,int IsHigh)
   */
 double CalcNewStopLoss(Instrument &inst,int ttype)
 {
-    PrintMsg(DebugLogHandle,StringFormat("CalcNewStopLoss called with\n instrument=%s ttype=%d",inst.AsString(),ttype));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("CalcNewStopLoss called with\n instrument=%s ttype=%d",inst.AsString(),ttype));
 
     double trade_price = 0.0;
     bool trade_placed = false;
@@ -1131,17 +1186,17 @@ double CalcNewStopLoss(Instrument &inst,int ttype)
     double Trade_size_MT4=Trade_size/inst.lot_size;
     double Trade_size_MT4_rounded=floor(Trade_size_MT4*100)/100; // round down to 2 decimal places
 
-    PrintMsg(DebugLogHandle,StringFormat("CalcNewStopLoss: ATR15[%f]",ATR15));
-    PrintMsg(DebugLogHandle,StringFormat("CalcNewStopLoss: inst.base_currency_chart[%s]",inst.base_currency_chart));
-    PrintMsg(DebugLogHandle,StringFormat("CalcNewStopLoss: ex_rate[%f]",ex_rate));
-    PrintMsg(DebugLogHandle,StringFormat("CalcNewStopLoss: AccBalance[%f]",AccBalance));
-    PrintMsg(DebugLogHandle,StringFormat("CalcNewStopLoss: RV[%f]",RV));
-    PrintMsg(DebugLogHandle,StringFormat("CalcNewStopLoss: RV_pips[%f]",RV_pips));
-    PrintMsg(DebugLogHandle,StringFormat("CalcNewStopLoss: RV_money[%f]",RV_money));
-    PrintMsg(DebugLogHandle,StringFormat("CalcNewStopLoss: PIP_value[%f]",PIP_value));
-    PrintMsg(DebugLogHandle,StringFormat("CalcNewStopLoss: Trade_size[%f]",Trade_size));
-    PrintMsg(DebugLogHandle,StringFormat("CalcNewStopLoss: Trade_size_MT4[%f]",Trade_size_MT4));
-    PrintMsg(DebugLogHandle,StringFormat("CalcNewStopLoss: Trade_size_MT4_rounded[%f]",Trade_size_MT4_rounded));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewStopLoss: ATR15[%f]",ATR15));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewStopLoss: inst.base_currency_chart[%s]",inst.base_currency_chart));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewStopLoss: ex_rate[%f]",ex_rate));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewStopLoss: AccBalance[%f]",AccBalance));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewStopLoss: RV[%f]",RV));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewStopLoss: RV_pips[%f]",RV_pips));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewStopLoss: RV_money[%f]",RV_money));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewStopLoss: PIP_value[%f]",PIP_value));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewStopLoss: Trade_size[%f]",Trade_size));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewStopLoss: Trade_size_MT4[%f]",Trade_size_MT4));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewStopLoss: Trade_size_MT4_rounded[%f]",Trade_size_MT4_rounded));
 
 
     //*************************
@@ -1219,6 +1274,7 @@ double CalcNewStopLoss(Instrument &inst,int ttype)
             }
         }
     }
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewStopLoss: stop loss = %f",stoploss));
 
     return stoploss;
 }
@@ -1226,8 +1282,13 @@ double CalcNewStopLoss(Instrument &inst,int ttype)
 /* For the given instrument details, place a pending order */
 double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
 {
-    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder called with\n instrument=%s ttype=%d",inst.AsString(),ttype));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("MakePendingOrder called with\n instrument=%s ttype=%d",inst.AsString(),ttype));
 
+    if(inst.GetNumTrades() >= CONST_MAX_ALLOW_TRADES)
+    {
+      PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: Returned. Maximum number of trades reached %d\n", CONST_MAX_ALLOW_TRADES));
+      return 0.0;
+    }
     double trade_price = 0.0;
     bool trade_placed = false;
     double ATR15=iATR(inst.symbol,PERIOD_D1,15,0);
@@ -1242,7 +1303,31 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
     }
     else
     {
-        ex_rate=iClose(inst.base_currency_chart,PERIOD_D1,0);
+        //ex_rate=iClose(inst.base_currency_chart,PERIOD_D1,0);
+        MqlTick tick;
+        SymbolInfoTick(inst.base_currency_chart,tick);
+         PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: inst.base_currency_chart = %s.",inst.base_currency_chart));
+        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: tick: tick.ask = %f.",tick.ask));
+        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: tick: tick.bid = %f.",tick.bid));
+        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: tick: tick.last = %f.",tick.last));
+        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: tick: tick.time = %f.",tick.time));
+        double temp = iOpen(inst.symbol,PERIOD_D1,0);
+        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: iOpen = %f",temp));
+        if(ttype == TT_LEWT || ttype == TT_LSMS)
+        {
+            ex_rate = temp;//tick.ask;
+        }
+        if(ttype == TT_SEWT || ttype == TT_SSMS)
+        {
+            ex_rate = temp;//tick.bid;
+        }
+        bool ex_rate_isgood = (ex_rate > 0);
+        if(!ex_rate_isgood)
+        {
+            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: Error: ex_rate == %f. Aborting.",ex_rate));
+            return 0.0;
+        }
+        
     }
 
     double AccBalance=AccountBalance()/100;
@@ -1251,23 +1336,23 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
     double Trade_size=PIP_value/inst.pip_location;
     double Trade_size_MT4=Trade_size/inst.lot_size;
     double Trade_size_MT4_rounded=floor(Trade_size_MT4*100)/100; // round down to 2 decimal places
-
-    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: ATR15[%f]",ATR15));
-    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: inst.base_currency_chart[%s]",inst.base_currency_chart));
-    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: ex_rate[%f]",ex_rate));
-    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: AccBalance[%f]",AccBalance));
-    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: RV[%f]",RV));
-    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: RV_pips[%f]",RV_pips));
-    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: RV_money[%f]",RV_money));
-    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: PIP_value[%f]",PIP_value));
-    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: Trade_size[%f]",Trade_size));
-    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: Trade_size_MT4[%f]",Trade_size_MT4));
-    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: Trade_size_MT4_rounded[%f]",Trade_size_MT4_rounded));
+    
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: ATR15[%f]",ATR15));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: inst.base_currency_chart[%s]",inst.base_currency_chart));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: ex_rate[%f]",ex_rate));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: AccBalance[%f]",AccBalance));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: RV[%f]",RV));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: RV_pips[%f]",RV_pips));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: RV_money[%f]",RV_money));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: PIP_value[%f]",PIP_value));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: Trade_size[%f]",Trade_size));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: Trade_size_MT4[%f]",Trade_size_MT4));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: Trade_size_MT4_rounded[%f]",Trade_size_MT4_rounded));
 
     if(Trade_size_MT4_rounded==0)
     {
-        PrintMsg(DebugLogHandle,"MakePendingOrder: Returned. NO TRADE SIZE AVAILABLE");
-        return false;
+        PrintMsg(DebugLogHandle,DB_LOW,"MakePendingOrder: Returned. NO TRADE SIZE AVAILABLE");
+        return 0.0;
     }
     //*************************
     double price = 0;
@@ -1296,18 +1381,18 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
                 string comment="jk_lsms";
 
                 int ticket=OrderSend(inst.symbol,OP_BUYSTOP,Trade_size_MT4_rounded,price,0,stoploss,takeprofit,comment,0,0,clrGreen);
-                PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[BUYSTOP],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
+                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[BUYSTOP],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
                                                 inst.symbol,Trade_size_MT4_rounded,price,stoploss,takeprofit,comment));
 
                 if(ticket<=0)
                 {
                     int error=GetLastError();
-                    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: OrderSend:Symbol[%s], ERROR placing trade: [%d] description: [%s]",
+                    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s], ERROR placing trade: [%d] description: [%s]",
                                                 inst.symbol,error,ErrorDescription(error)));
                 }
                 else
                 {
-                    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: OrderSend placed successfully. Ticket no:[%d]",ticket));
+                    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend placed successfully. Ticket no:[%d]",ticket));
                     trade_placed=true;
                     inst.lsms_trade=ticket;
                     //Trade trade;
@@ -1344,18 +1429,18 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
                 string comment="jk_lewt";
 
                 int ticket=OrderSend(inst.symbol,OP_BUYSTOP,Trade_size_MT4_rounded,price,0,stoploss,takeprofit,comment,0,0,clrGreen);
-                PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[BUYSTOP],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
+                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[BUYSTOP],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
                                                 inst.symbol,Trade_size_MT4_rounded,price,stoploss,takeprofit,comment));
 
                 if(ticket<0)
                 {
                     int error=GetLastError();
-                    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: OrderSend:Symbol[%s], ERROR placing trade: [%d] description: [%s]",
+                    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s], ERROR placing trade: [%d] description: [%s]",
                                                 inst.symbol,error,ErrorDescription(error)));
                 }
                 else
                 {
-                    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: OrderSend placed successfully. [%s] Ticket no:[%d]",comment,ticket));
+                    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend placed successfully. [%s] Ticket no:[%d]",comment,ticket));
                     trade_placed=true;
                     inst.lewt_trade=ticket;
                     //Trade trade;
@@ -1394,18 +1479,18 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
                 string comment="jk_sewt";
 
                 int ticket=OrderSend(inst.symbol,OP_SELLSTOP,Trade_size_MT4_rounded,price,0,stoploss,takeprofit,comment,0,0,clrGreen);
-                PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[BUYSTOP],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
+                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[BUYSTOP],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
                                                 inst.symbol,Trade_size_MT4_rounded,price,stoploss,takeprofit,comment));
 
                 if(ticket<0)
                 {
                     int error=GetLastError();
-                    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: OrderSend:Symbol[%s], ERROR placing trade: [%d] description: [%s]",
+                    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s], ERROR placing trade: [%d] description: [%s]",
                                                 inst.symbol,error,ErrorDescription(error)));
                 }
                 else
                 {
-                    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: OrderSend placed successfully. [%s] Ticket no:[%d]",comment,ticket));
+                    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend placed successfully. [%s] Ticket no:[%d]",comment,ticket));
                     trade_placed=true;
                     inst.sewt_trade=ticket;
                     //Trade trade;
@@ -1443,18 +1528,18 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
                 string comment="jk_ssms";
 
                 int ticket=OrderSend(inst.symbol,OP_SELLSTOP,Trade_size_MT4_rounded,price,0,stoploss,takeprofit,comment,0,0,clrGreen);
-                PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[BUYSTOP],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
+                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[BUYSTOP],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
                                                 inst.symbol,Trade_size_MT4_rounded,price,stoploss,takeprofit,comment));
 
                 if(ticket<0)
                 {
                     int error=GetLastError();
-                    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: OrderSend:Symbol[%s], ERROR placing trade: [%d] description: [%s]",
+                    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s], ERROR placing trade: [%d] description: [%s]",
                                                 inst.symbol,error,ErrorDescription(error)));
                 }
                 else
                 {
-                    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: OrderSend placed successfully. [%s] Ticket no:[%d]",comment,ticket));
+                    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend placed successfully. [%s] Ticket no:[%d]",comment,ticket));
                     trade_placed=true;
                     inst.ssms_trade=ticket;
                     //Trade trade;
@@ -1475,7 +1560,7 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
             }
         }
     }
-    PrintMsg(DebugLogHandle,StringFormat("MakePendingOrder: returned trade_placed = %s",(trade_placed ? "true" : "false")));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("MakePendingOrder: returned trade_placed = %s",(trade_placed ? "true" : "false")));
 
     return trade_price = price;
 }
@@ -1483,7 +1568,7 @@ double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
 /* For the given symbol and trade type, find the indicator boundary and make a trade */
 double MakeTrade(Instrument &inst,TradeType ttype)
 {
-    PrintMsg(DebugLogHandle,StringFormat("MakeTrade called with\n symbol=%s ltc period = %d ttype=%d",inst.symbol,ttype));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("MakeTrade called with\n symbol=%s ltc period = %d ttype=%d",inst.symbol,ttype));
     //bool made_trade=false;
     double made_price=0.0;
     int index=-1;
@@ -1503,17 +1588,22 @@ double MakeTrade(Instrument &inst,TradeType ttype)
                 Trade new_trade;
                 new_trade.Clear();
                 made_price=MakePendingOrder(inst,ttype,new_trade);
-                WriteTradeLog(new_trade);
-                AddTrade(new_trade);
+                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder returned made price = %f\n",made_price));
+                if(made_price > 0.0)
+                {
+                    WriteTradeLog(new_trade);
+                    AddTrade(new_trade);   
+                }
+                
             }
             else
             {
-                PrintMsg(DebugLogHandle,StringFormat("MakeTrade: Symbol %s: error in value. iHigh returned -1, couldn't find value in ltct period.",inst.symbol));
+                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakeTrade: Symbol %s: error in value. iHigh returned -1, couldn't find value in ltct period.",inst.symbol));
             }
         }
         else
         {
-            PrintMsg(DebugLogHandle,StringFormat("MakeTrade: Symbol %s: error in index. iHighest returned -1, couldn't find index in ltct period.",inst.symbol));
+            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakeTrade: Symbol %s: error in index. iHighest returned -1, couldn't find index in ltct period.",inst.symbol));
         }
     }
 
@@ -1531,20 +1621,24 @@ double MakeTrade(Instrument &inst,TradeType ttype)
                 Trade new_trade;
                 new_trade.Clear();
                 made_price=MakePendingOrder(inst,ttype,new_trade);
-                WriteTradeLog(new_trade);
-                AddTrade(new_trade);
+                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder returned made price = %f\n",made_price));
+                if(made_price > 0.0)
+                {
+                    WriteTradeLog(new_trade);
+                    AddTrade(new_trade);   
+                }
             }
             else
             {
-                PrintMsg(DebugLogHandle,StringFormat("MakeTrade: Symbol %s: error in value. iHigh returned -1, couldn't find value in ltct period.",inst.symbol));
+                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakeTrade: Symbol %s: error in value. iHigh returned -1, couldn't find value in ltct period.",inst.symbol));
             }
         }
         else
         {
-            PrintMsg(DebugLogHandle,StringFormat("OnStart: Symbol %s: error in index. iHighest returned -1, couldn't find index in ltct period.",inst.symbol));
+            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("OnStart: Symbol %s: error in index. iHighest returned -1, couldn't find index in ltct period.",inst.symbol));
         }
     }
-    //PrintMsg(DebugLogHandle,StringFormat("MakeTrade returned %s ",(made_trade ? "true" : "false")));
+    //PrintMsg(DebugLogHandle,DB_MAX,StringFormat("MakeTrade returned %s ",(made_trade ? "true" : "false")));
     return made_price; 
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
@@ -1597,7 +1691,7 @@ int GetTradeIndexFromTicketNumber(int ticket_num)
                                     // // Trades[trade_index].comment;
                                     // Trades[trade_index].is_filled = true;
                                     // Trades[trade_index].trade_state = TS_OPEN;
-                                    // PrintMsg(DebugLogHandle,StringFormat("open price for the order ticket number %d = %f ",Trades[trade_index].open_price);
+                                    // PrintMsg(DebugLogHandle,DB_MAX,StringFormat("open price for the order ticket number %d = %f ",Trades[trade_index].open_price);
 
                                 // }
                                 // if (Trades[trade_index].trade_state == OPEN)
@@ -1608,7 +1702,7 @@ int GetTradeIndexFromTicketNumber(int ticket_num)
                                 // if (Trades[trade_index].trade_state == CLOSED || Trades[trade_index].trade_state == REPLACED)
                                 // {
                                   // // trade state error!!!!
-                                  // PrintMsg(DebugLogHandle,"Trade error, trade is open but state is set CLOSED or REPLACED");
+                                  // PrintMsg(DebugLogHandle,DB_MAX,"Trade error, trade is open but state is set CLOSED or REPLACED");
                                 // }
 
                             // }
@@ -1630,7 +1724,7 @@ int GetTradeIndexFromTicketNumber(int ticket_num)
                             // // Trades[trade_index].comment;
                             // Trades[trade_index].is_filled = true;
                             // Trades[trade_index].state = OPEN;
-                            // PrintMsg(DebugLogHandle,StringFormat("open price for the order ticket number %d = %f ",Trades[trade_index].price);
+                            // PrintMsg(DebugLogHandle,DB_MAX,StringFormat("open price for the order ticket number %d = %f ",Trades[trade_index].price);
 
 
 
@@ -1670,7 +1764,7 @@ void AddTrade(Trade &other)
         {
             //  found an empty trade
             Trades[index].Copy(other);
-            PrintMsg(DebugLogHandle,StringFormat("Added Trade %d at position %d",other.ticket_number,index));
+            PrintMsg(DebugLogHandle,DB_MAX,StringFormat("Added Trade %d at position %d",other.ticket_number,index));
             break;
         }
     }
@@ -1680,13 +1774,15 @@ void AddTrade(Trade &other)
 // returns trade index of ticket number
 void CheckTrade(int trade_index, int instr_index)
 {
-    PrintMsg(DebugLogHandle,StringFormat("CheckTrade called with\n trade_index=%d instr_index=%d",trade_index,instr_index));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("CheckTrade called with\n trade_index=%d instr_index=%d",trade_index,instr_index));
     int order_type = -1;
     // find out the trades current known status from trade log
     if(trade_index > -1 && Trades[trade_index].trade_state != TS_INVALID)
     {
         if(Trades[trade_index].trade_state == TS_PENDING)
         {
+            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("order ticket number %d was pending",Trades[trade_index].ticket_number));
+
             // Trade was last seen as PENDING, could now be either: still PENDING, OPEN or CLOSED
             // operate on order, must 'select' it first
             bool selected = OrderSelect(Trades[trade_index].ticket_number,SELECT_BY_TICKET);
@@ -1702,6 +1798,7 @@ void CheckTrade(int trade_index, int instr_index)
                         order_type = OrderType();
                         if(order_type > 0 && (order_type == OP_BUY || order_type == OP_SELL))
                         {
+                            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("order ticket number %d is now open",Trades[trade_index].ticket_number));
                             // order is open
                             Trades[trade_index].open_price = OrderOpenPrice();
                             Trades[trade_index].open_time = OrderOpenTime();
@@ -1717,7 +1814,7 @@ void CheckTrade(int trade_index, int instr_index)
                             Trades[trade_index].is_filled = true;
                             Trades[trade_index].trade_state = TS_OPEN;
                             Trades[trade_index].last_price = OrderOpenPrice();
-                            PrintMsg(DebugLogHandle,StringFormat("open price for the order ticket number %d = %f ",Trades[trade_index].ticket_number,Trades[trade_index].open_price));
+                            PrintMsg(DebugLogHandle,DB_MAX,StringFormat("open price for the order ticket number %d = %f ",Trades[trade_index].ticket_number,Trades[trade_index].open_price));
                             WriteTradeLog(Trades[trade_index]);
                             
                         }
@@ -1726,7 +1823,7 @@ void CheckTrade(int trade_index, int instr_index)
                             // order is still pending 
                             // ATR will have changed, so recalc trade values
                             // delete and re-make order 
-                            PrintMsg(DebugLogHandle,StringFormat("Order with ticket number %d still pending, deleting and replacing trade",
+                            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("Order with ticket number %d still pending, deleting and replacing trade",
                                                                     Trades[trade_index].ticket_number));
 
                             bool deleted = OrderDelete(Trades[trade_index].ticket_number);
@@ -1746,6 +1843,7 @@ void CheckTrade(int trade_index, int instr_index)
                     }
                     else
                     {
+                        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("order ticket number %d is now closed",Trades[trade_index].ticket_number));
                         // order is now closed
                         Trades[trade_index].close_price = OrderClosePrice();
                         Trades[trade_index].close_time = OrderCloseTime();
@@ -1757,7 +1855,7 @@ void CheckTrade(int trade_index, int instr_index)
                         Trades[trade_index].profit = OrderProfit();
                         Trades[trade_index].comment = OrderComment();
                         Trades[trade_index].trade_state = TS_CLOSED;
-                        PrintMsg(DebugLogHandle,StringFormat("close price for the order ticket number %d = %f ",Trades[trade_index].ticket_number,Trades[trade_index].close_price));
+                        PrintMsg(DebugLogHandle,DB_MAX,StringFormat("close price for the order ticket number %d = %f ",Trades[trade_index].ticket_number,Trades[trade_index].close_price));
                         
                         if(Trades[trade_index].trade_type == TT_LSMS) { Instrs[instr_index].lsms_trade = 0; }
                         if(Trades[trade_index].trade_type == TT_LEWT) { Instrs[instr_index].lewt_trade = 0; }
@@ -1773,25 +1871,26 @@ void CheckTrade(int trade_index, int instr_index)
                         if(order_type == OP_BUY) { Trades[trade_index].trade_operation = TO_BUY; }
                         if(order_type == OP_SELL) { Trades[trade_index].trade_operation = TO_SELL; }
                         Trades[trade_index].is_filled = true;
-                        PrintMsg(DebugLogHandle,StringFormat("order went from pending to close before update.. open price for the order ticket number %d = %f ",Trades[trade_index].ticket_number,Trades[trade_index].open_price));
+                        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("order went from pending to close before update.. open price for the order ticket number %d = %f ",Trades[trade_index].ticket_number,Trades[trade_index].open_price));
                         WriteTradeLog(Trades[trade_index]);
                     }
                 }
                 else
                 {
                     // order symbol mismatch
-                    PrintMsg(DebugLogHandle,StringFormat("Trade error, order does not have the same symbol as trade log, Log has %s, order has %s",Trades[trade_index].symbol,OrderSymbol()));
+                    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("Trade error, order does not have the same symbol as trade log, Log has %s, order has %s",Trades[trade_index].symbol,OrderSymbol()));
                 }  
             }
             else
             {
                 // order could not be selected
-                PrintMsg(DebugLogHandle,StringFormat("Trade error, order could not be selected. OrderSelect returned the error of %s",GetLastError()));
+                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("Trade error, order could not be selected. OrderSelect returned the error of %s",GetLastError()));
             }  
         }
         // trade was previously OPEN
         if(Trades[trade_index].trade_state == TS_OPEN)
         {
+            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("order ticket number %d was open",Trades[trade_index].ticket_number));
             // operate on order, must 'select' it first
             bool selected = OrderSelect(Trades[trade_index].ticket_number,SELECT_BY_TICKET);
             if(selected)
@@ -1802,10 +1901,12 @@ void CheckTrade(int trade_index, int instr_index)
                     datetime close_time = OrderCloseTime();
                     if(close_time == 0)
                     {
+                        
                         // order is still open
                         order_type = OrderType();
                         if(order_type > 0 && (order_type == OP_BUY || order_type == OP_SELL))
                         {
+                            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("order ticket number %d is still open",Trades[trade_index].ticket_number));
                             // order is still open
                             //Trades[trade_index].open_price = OrderOpenPrice();
                             //Trades[trade_index].open_time = OrderOpenTime();
@@ -1820,9 +1921,8 @@ void CheckTrade(int trade_index, int instr_index)
                             if(order_type == OP_SELL) { Trades[trade_index].trade_operation = TO_SELL; }
                             Trades[trade_index].is_filled = true;
                             Trades[trade_index].trade_state = TS_OPEN;
-                            //PrintMsg(DebugLogHandle,StringFormat("open price for the order ticket number %d = %f ",ticket_num,Trades[trade_index].open_price);
-                            PrintMsg(DebugLogHandle,StringFormat("Order with ticket number %d still open",
-                                Trades[trade_index].ticket_number));
+                            //PrintMsg(DebugLogHandle,DB_MAX,StringFormat("open price for the order ticket number %d = %f ",ticket_num,Trades[trade_index].open_price);
+                            
                             // *****************************************
                             // update the stop-loss in light of new ATR.
                             bool adjust_stoploss = false;
@@ -1834,7 +1934,10 @@ void CheckTrade(int trade_index, int instr_index)
                                 last_tick_bid_price = last_tick.bid;
                                 last_tick_ask_price = last_tick.ask;
                             }
-                            else Print("SymbolInfoTick() failed, error = ",GetLastError());
+                            else
+                            {
+                                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("SymbolInfoTick() failed, error = ",GetLastError()));
+                            }
                             
                             if(order_type == OP_BUY)
                             {
@@ -1856,14 +1959,15 @@ void CheckTrade(int trade_index, int instr_index)
                             }
                             if(adjust_stoploss)
                             {
+                                PrintMsg(DebugLogHandle,DB_LOW,"adjusting stop loss");
                                 // make a dummy new trade just to calculate what the stoploss would be for a new trade
                                 double new_stop_loss = CalcNewStopLoss(Instrs[instr_index],Trades[trade_index].trade_type);
                                 bool res = OrderModify(OrderTicket(),OrderOpenPrice(),new_stop_loss,OrderTakeProfit(),0,Blue);
                                 if(!res)
-                                    PrintMsg(DebugLogHandle,StringFormat("Error in OrderModify. Error code=d",GetLastError()));
+                                    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("Error in OrderModify. Error code=d",GetLastError()));
                                 else
                                 {
-                                    Print("Order modified successfully.");
+                                    PrintMsg(DebugLogHandle,DB_LOW,"Order modified successfully.");
                                     Trades[trade_index].stoploss = new_stop_loss;
                                     WriteTradeLog(Trades[trade_index]);
                                 }  
@@ -1873,6 +1977,7 @@ void CheckTrade(int trade_index, int instr_index)
                     }
                     else
                     {
+                        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("order ticket number %d is now closed",Trades[trade_index].ticket_number));
                         // order is now closed
                         Trades[trade_index].close_price = OrderClosePrice();
                         Trades[trade_index].close_time = OrderCloseTime();
@@ -1884,8 +1989,8 @@ void CheckTrade(int trade_index, int instr_index)
                         Trades[trade_index].profit = OrderProfit();
                         Trades[trade_index].comment = OrderComment();
                         Trades[trade_index].trade_state = TS_CLOSED;
-                        PrintMsg(DebugLogHandle,StringFormat("close price for the order ticket number %d = %f ",Trades[trade_index].close_price));
-                        
+                        PrintMsg(DebugLogHandle,DB_MAX,StringFormat("close price for the order ticket number %d = %f ",Trades[trade_index].close_price));
+                        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("profit on order ticket number %d was %f",Trades[trade_index].ticket_number,Trades[trade_index].profit ));
                         if(Trades[trade_index].trade_type == TT_LSMS) { Instrs[instr_index].lsms_trade = 0; }
                         if(Trades[trade_index].trade_type == TT_LEWT) { Instrs[instr_index].lewt_trade = 0; }
                         if(Trades[trade_index].trade_type == TT_SEWT) { Instrs[instr_index].sewt_trade = 0; }
@@ -1896,19 +2001,19 @@ void CheckTrade(int trade_index, int instr_index)
                 else
                 {
                     // order does not have the correct symbol
-                    PrintMsg(DebugLogHandle,StringFormat("Trade error, order does not have the sam symbol as trade log Log has %s, order has %s",Trades[trade_index].symbol,OrderSymbol()));
+                    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("Trade error, order does not have the sam symbol as trade log Log has %s, order has %s",Trades[trade_index].symbol,OrderSymbol()));
                 }  
             }
             else
             {
                 // order could not be selected
-                PrintMsg(DebugLogHandle,StringFormat("Trade error, order could not be selected. OrderSelect returned the error of %d",GetLastError()));
+                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("Trade error, order could not be selected. OrderSelect returned the error of %d",GetLastError()));
             }  
         }
         
         if(Trades[trade_index].trade_state == TS_CLOSED)
         {
-            PrintMsg(DebugLogHandle,"Trade error, Instrument still has closed trade attached. Setting to zero");
+            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("Trade error, Instrument still has closed trade attached. Setting to zero",Trades[trade_index].ticket_number));
             if(Trades[trade_index].trade_type == TT_LSMS) { Instrs[instr_index].lsms_trade = 0; }
             if(Trades[trade_index].trade_type == TT_LEWT) { Instrs[instr_index].lewt_trade = 0; }
             if(Trades[trade_index].trade_type == TT_SEWT) { Instrs[instr_index].sewt_trade = 0; }
@@ -1919,8 +2024,8 @@ void CheckTrade(int trade_index, int instr_index)
     }
     else
     {
-        PrintMsg(DebugLogHandle,"Trade error, Trade index could not be found (couldn't find trade in local list) or trade is set as INVALID (never populated)");
+        PrintMsg(DebugLogHandle,DB_LOW,"Trade error, Trade index could not be found (couldn't find trade in local list) or trade is set as INVALID (never populated)");
     }
-    PrintMsg(DebugLogHandle,"CheckTrade returned");
+    PrintMsg(DebugLogHandle,DB_MAX,"CheckTrade returned");
 }
 
