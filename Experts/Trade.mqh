@@ -209,7 +209,7 @@ string Trade::AsString()
    string close_time_string = TimeToString(close_time,TIME_DATE|TIME_SECONDS);
    string expiration_date_string = TimeToString(open_time,TIME_DATE|TIME_SECONDS);
 
-   string str = StringFormat("%d,%s,%f,%s,%f,%s,%f,%f,%f,%f,%f,%f,%f,%s,%s,%s,%s,%s,%s,%f\n",
+   string str = StringFormat("tnum=%d,symb=%s,oprice=%f,otime=%s,cprice=%f,ctime=%s,vol=%f,sl=%f,tp=%f,comm=%f,swp=%f,prft=%f,mnum=%f,exp=%s,cmnt=%s,ttype=%s,toper=%s,filled=%s,tstat=%s,lprice%f\n",
                             ticket_number,
                             symbol,
                             open_price,
