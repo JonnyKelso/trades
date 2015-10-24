@@ -1,5 +1,5 @@
 //+------------------------------------------------------------------+
-//|                                                    jonnyEA_1.mq4 |
+//|                                                    jonnyEA_simple.mq4 |
 //|                                     Jonny Kelso, Copyright 2015. |
 //|                                             https://www.mql4.com |
 //+------------------------------------------------------------------+
@@ -17,7 +17,8 @@
 /* constants */
 const int CONST_MAX_PERIOD = 60;
 const int CONST_SMS_PERIOD = 52;
-extern const int CONST_EWT_PERIOD = 10;
+extern const int CONST_TRADE_PERCENT_RISK = 1;
+extern const int CONST_EWT_PERIOD = 21;
 const int CONST_NUM_SYMBOLS = 17;
 Instrument Instrs[17];
 const int CONST_MAX_ALLOW_TRADES = 2;
@@ -220,7 +221,7 @@ void Start()
         }
     }
         
-    int instr_index = 0;
+    int instr_index = 3;
 //--- LEWT
         //int ticket_num = Instrs[instr_index].lewt_trade;
         // do we already have a trade here?
@@ -231,7 +232,6 @@ void Start()
             if(trade_index >= 0)
             {
                 CheckTrade(trade_index, instr_index);
-                ewt_long_price = Trades[trade_index].open_price;
             }
         }
         else
@@ -242,7 +242,7 @@ void Start()
             // make new trade if possible
             if(GetNumberActiveTrades() < CONST_MAX_ALLOW_TRADES)
             {
-                ewt_long_price = MakeTrade(Instrs[instr_index],TT_LEWT);
+                MakeTrade(Instrs[instr_index],TT_LEWT);
             }
             else
             {
@@ -259,7 +259,6 @@ void Start()
             if(trade_index >= 0)
             {
                 CheckTrade(trade_index, instr_index);
-                ewt_short_price = Trades[trade_index].open_price;
             }
             
         }
@@ -270,7 +269,7 @@ void Start()
             // make new trade if possible
             if(GetNumberActiveTrades() < CONST_MAX_ALLOW_TRADES)
             {
-                ewt_short_price = MakeTrade(Instrs[instr_index],TT_SEWT);
+                MakeTrade(Instrs[instr_index],TT_SEWT);
             }
             else
             {
@@ -1148,7 +1147,7 @@ bool CalcNewSLTP(Instrument &inst,Trade &trade)
     }
     else
     {
-        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("SymbolInfoTick() failed, error = %s",GetLastError()));
+        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewSLTP(): SymbolInfoTick() failed, error = %s",GetLastError()));
         return false;
     }
     
@@ -1187,15 +1186,25 @@ bool CalcNewSLTP(Instrument &inst,Trade &trade)
         }
         else
         {
-            ex_rate=iClose(inst.base_currency_chart,CONST_PERIOD,0);
+            //ex_rate=iClose(inst.base_currency_chart,CONST_PERIOD,0);
+            ex_rate=Close[0];
         }
+      //--- get minimum lot size
+      double mrkt_lot_size=MarketInfo(Symbol(),MODE_LOTSIZE);
+      double mrkt_lot_min=MarketInfo(Symbol(),MODE_MINLOT);
+      double mrkt_lot_max=MarketInfo(Symbol(),MODE_MAXLOT);
+      double mrkt_lot_step=MarketInfo(Symbol(),MODE_LOTSTEP);
+      PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewSLTP: Market: lot size=[%f],min lot size=[%f], max lot size=[%f], lot step=[%f]",
+      mrkt_lot_size,mrkt_lot_min,mrkt_lot_max,mrkt_lot_step));
     
         double AccBalance=AccountBalance()/100;
-        double RV_money=(AccBalance/100)*ex_rate;
-        double PIP_value=RV_money/RV_pips;
-        double Trade_size=PIP_value/inst.pip_location;
-        double Trade_size_MT4=Trade_size/inst.lot_size;
-        double Trade_size_MT4_rounded=floor(Trade_size_MT4*100)/100; // round down to 2 decimal places
+      double RV_money=((ex_rate>0)?((AccBalance*(1/CONST_TRADE_PERCENT_RISK))*ex_rate):0.0);
+      double PIP_value=((RV_pips >0)?(RV_money/RV_pips):0.0);
+      double Trade_size=PIP_value/inst.pip_location;
+      double Trade_size_MT4=Trade_size/inst.lot_size;
+      double Trade_size_MT4_rounded=floor(Trade_size_MT4*(1/mrkt_lot_min))/(1/mrkt_lot_min); // round down to nearest factor of min lot size 
+      if(Trade_size_MT4_rounded > mrkt_lot_max){Trade_size_MT4_rounded = mrkt_lot_max;}
+    
     
         PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewSLTP: ATR15[%f]",ATR15));
         PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewSLTP: inst.base_currency_chart[%s]",inst.base_currency_chart));
@@ -1208,8 +1217,7 @@ bool CalcNewSLTP(Instrument &inst,Trade &trade)
         PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewSLTP: Trade_size[%f]",Trade_size));
         PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewSLTP: Trade_size_MT4[%f]",Trade_size_MT4));
         PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalcNewSLTP: Trade_size_MT4_rounded[%f]",Trade_size_MT4_rounded));
-    
-    
+
         //*************************
         double price = 0;
         int slippage = 0;
@@ -1267,201 +1275,55 @@ bool CalcNewSLTP(Instrument &inst,Trade &trade)
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
 /* For the given instrument details, place a pending order */
-double MakePendingOrder(Instrument &inst,int ttype,Trade &placed_trade)
+int MakePendingOrder(Instrument &inst,Trade &trade)
 {
-    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("MakePendingOrder called with\n instrument=%s ttype=%d",inst.AsString(),ttype));
-
-    if(inst.GetNumTrades() >= CONST_MAX_ALLOW_TRADES)
+    bool trade_placed = false;
+    bool ok_to_trade = CalculateNewTradeValues(inst,trade);
+    int cmd = -1;
+    if(trade.trade_operation == TO_BUYSTOP){cmd = OP_BUYSTOP;}
+    if(trade.trade_operation == TO_SELLSTOP){cmd = OP_SELLSTOP;}
+    
+    if((inst.GetNumTrades() >= CONST_MAX_ALLOW_TRADES) && (cmd > -1))
     {
       PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: Returned. Maximum number of trades reached %d\n", CONST_MAX_ALLOW_TRADES));
-      return 0.0;
-    }
-    double trade_price = 0.0;
-    bool trade_placed = false;
-    double ATR15=iATR(inst.symbol,CONST_PERIOD,15,0);
-    double RV=2*ATR15;
-    double RV_pips= RV/inst.pip_location;
-    double volume = 0;
-    double ex_rate= 0;
-
-    if(inst.base_currency_chart=="GBP")
-    {
-        ex_rate=1;
     }
     else
     {
-        ex_rate=iClose(inst.base_currency_chart,CONST_PERIOD,0);
-    }
-
-    double AccBalance=AccountBalance()/100;
-    double RV_money=(AccBalance/100)*ex_rate;
-    double PIP_value=RV_money/RV_pips;
-    double Trade_size=PIP_value/inst.pip_location;
-    double Trade_size_MT4=Trade_size/inst.lot_size;
-    double Trade_size_MT4_rounded=floor(Trade_size_MT4*100)/100; // round down to 2 decimal places
-
-    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: ATR15[%f]",ATR15));
-    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: inst.base_currency_chart[%s]",inst.base_currency_chart));
-    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: ex_rate[%f]",ex_rate));
-    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: AccBalance[%f]",AccBalance));
-    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: RV[%f]",RV));
-    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: RV_pips[%f]",RV_pips));
-    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: RV_money[%f]",RV_money));
-    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: PIP_value[%f]",PIP_value));
-    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: Trade_size[%f]",Trade_size));
-    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: Trade_size_MT4[%f]",Trade_size_MT4));
-    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: Trade_size_MT4_rounded[%f]",Trade_size_MT4_rounded));
-
-    if(Trade_size_MT4_rounded==0)
-    {
-        PrintMsg(DebugLogHandle,DB_LOW,"MakePendingOrder: Returned. NO TRADE SIZE AVAILABLE");
-        return 0.0;
-    }
-    //*************************
-    double price = 0;
-    int slippage = 0;
-    //*************************
-    // Calculate StopLoss
-    double stoploss=0;
-    //*************************
-    double takeprofit=0;
-
-    //--- get minimum stop level
-   double minstoplevel=MarketInfo(Symbol(),MODE_STOPLEVEL);
-   PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: Minimum Stop Level=%f points",minstoplevel));
-    //--- calculated SL and TP prices must be normalized
-   double min_buy_stoploss=NormalizeDouble(Bid-minstoplevel*Point,Digits);
-   double min_buy_takeprofit=NormalizeDouble(Bid+minstoplevel*Point,Digits);
-
-   
-   
-    if(ttype==TT_LEWT)
-    {
-        int lewt_index=-1;
-        double lewt_value=-1;
-        lewt_index=iHighest(inst.symbol,CONST_PERIOD,MODE_HIGH,CONST_EWT_PERIOD,0);
-        if(lewt_index>-1)
+        int ticket=OrderSend(Symbol(),cmd,trade.volume,trade.open_price,0,trade.stoploss,trade.take_profit,trade.comment,0,0,clrWhite);
+        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[%s],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
+                                        Symbol(),trade.trade_operation,trade.volume,trade.open_price,trade.stoploss,trade.take_profit,trade.comment));
+        
+        if(ticket<0)
         {
-            lewt_value=iHigh(inst.symbol,CONST_PERIOD,lewt_index);
-            if(lewt_value>-1)
-            {
-                price       =   lewt_value;
-                if((price - Ask) < (minstoplevel*Point))
-                {
-                    price += minstoplevel*Point;
-                    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("Adjusted lewt price from %f to %f due to min stops",lewt_value,price));
-                }
-                stoploss    =   NormalizeDouble(price-RV-(minstoplevel*Point),Digits);
-                takeprofit  =   NormalizeDouble(price+(RV*CONST_RV_MULTIPLIER)+(minstoplevel*Point),Digits);
-                if(takeprofit<0){takeprofit=0;}
-                
-                string comment="jk_long_ewt";
-                int ticket=OrderSend(inst.symbol,OP_BUYSTOP,Trade_size_MT4_rounded,price,0,stoploss,takeprofit,comment,0,0,clrWhite);
-                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[BUYSTOP],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
-                                                inst.symbol,Trade_size_MT4_rounded,price,stoploss,takeprofit,comment));
-
-                if(ticket<0)
-                {
-                    int error=GetLastError();
-                    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s], ERROR placing trade: [%d] description: [%s]",
-                                                inst.symbol,error,ErrorDescription(error)));
-                    price = 0.0;
-                }
-                else
-                {
-                    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend placed successfully. [%s] Ticket no:[%d]",comment,ticket));
-                    trade_placed=true;
-                    inst.lewt_trade=ticket;
-                    //Trade trade;
-                    placed_trade.Clear();
-                    placed_trade.ticket_number=ticket;
-                    placed_trade.symbol= inst.symbol;
-                    placed_trade.open_price = price;
-                    placed_trade.volume= Trade_size_MT4_rounded;
-                    placed_trade.stoploss=stoploss;
-                    placed_trade.take_profit=takeprofit;
-                    placed_trade.comment=comment;
-                    placed_trade.trade_type=TT_LEWT;
-                    placed_trade.trade_operation = TO_BUYSTOP;
-                    placed_trade.trade_state = TS_PENDING;
-                    //WriteTradeLog(placed_trade);
-                    trade_price=price;
-                }
-            }
-
+            int error=GetLastError();
+            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s], ERROR placing trade: [%d] description: [%s]",
+                                        Symbol(),error,ErrorDescription(error)));
         }
-    }
-     //--- calculated SL and TP prices must be normalized
-   double min_sell_stoploss=NormalizeDouble(Ask-minstoplevel*Point,Digits);
-   double min_sell_takeprofit=NormalizeDouble(Ask+minstoplevel*Point,Digits);
-    if(ttype==TT_SEWT)
-    {
-        int sewt_index=-1;
-        double sewt_value=-1;
-        sewt_index=iLowest(inst.symbol,CONST_PERIOD,MODE_LOW,CONST_EWT_PERIOD,0);
-        if(sewt_index>-1)
+        else
         {
-            sewt_value=iLow(inst.symbol,CONST_PERIOD,sewt_index);
-            if(sewt_value>-1)
-            {
-                price       =   sewt_value;
-                if((Bid - price) < (minstoplevel*Point))
-                {
-                    price -= minstoplevel*Point;
-                    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("Adjusted sewt price from %f to %f due to min stops",sewt_value,price));
-                }
-                stoploss    =   NormalizeDouble(price+RV+(minstoplevel*Point),Digits);
-                takeprofit  =   NormalizeDouble(price-(RV*CONST_RV_MULTIPLIER)-(minstoplevel*Point),Digits);
-                if(takeprofit<0){takeprofit=0;}
-                
-                string comment="jk_short_ewt";
-                int ticket=OrderSend(inst.symbol,OP_SELLSTOP,Trade_size_MT4_rounded,price,0,stoploss,takeprofit,comment,0,0,clrDarkOrange);
-                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[SELLSTOP],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
-                                                inst.symbol,Trade_size_MT4_rounded,price,stoploss,takeprofit,comment));
-
-                if(ticket<0)
-                {
-                    int error=GetLastError();
-                    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s], ERROR placing trade: [%d] description: [%s]",
-                                                inst.symbol,error,ErrorDescription(error)));
-                                                
-                    price = 0.0;
-                }
-                else
-                {
-                    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend placed successfully. [%s] Ticket no:[%d]",comment,ticket));
-                    trade_placed=true;
-                    inst.sewt_trade=ticket;
-                    //Trade trade;
-                    placed_trade.Clear();
-                    placed_trade.ticket_number=ticket;
-                    placed_trade.symbol= inst.symbol;
-                    placed_trade.open_price = price;
-                    placed_trade.volume= Trade_size_MT4_rounded;
-                    placed_trade.stoploss=stoploss;
-                    placed_trade.take_profit=takeprofit;
-                    placed_trade.comment=comment;
-                    placed_trade.trade_type=TT_SEWT;
-                    placed_trade.trade_operation = TO_SELLSTOP;
-                    placed_trade.trade_state = TS_PENDING;
-                    //WriteTradeLog(placed_trade);
-                    trade_price=price;
-                }
-            }
+            trade_placed = true;
+            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend placed successfully. [%s] Ticket no:[%d]",trade.comment,ticket));
+            if(trade.trade_operation == TO_BUYSTOP){inst.lewt_trade=ticket;}
+            if(trade.trade_operation == TO_SELLSTOP){inst.sewt_trade=ticket;}
+            //Trade trade;
+            trade.ticket_number=ticket;
+            trade.open_price = 0.0;
         }
+    
     }
 
+ 
     PrintMsg(DebugLogHandle,DB_MAX,StringFormat("MakePendingOrder: returned trade_placed = %s",(trade_placed ? "true" : "false")));
 
-    return trade_price = price;
+    return trade.ticket_number;
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
 /* For the given symbol and trade type, find the indicator boundary and make a trade */
-double MakeTrade(Instrument &inst,TradeType ttype)
+int MakeTrade(Instrument &inst,TradeType ttype)
 {
     PrintMsg(DebugLogHandle,DB_MAX,StringFormat("MakeTrade called with\n symbol=%s ltc period = %d ttype=%d",inst.symbol,ttype));
     //bool made_trade=false;
-    double made_price=0.0;
+    int trade_ticket=0;
     int index=-1;
     double value=-1;
 
@@ -1482,29 +1344,25 @@ double MakeTrade(Instrument &inst,TradeType ttype)
             {
                 Trade new_trade;
                 new_trade.Clear();
-                made_price=MakePendingOrder(inst,ttype,new_trade);
-                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder returned made price = %f\n",made_price));
-                if(made_price > 0.0)
+                new_trade.trade_operation = TO_BUYSTOP;
+                new_trade.trade_type = TT_LEWT;
+                new_trade.comment = "lewt";
+                trade_ticket=MakePendingOrder(inst,new_trade);
+                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder returned trade ticket = %d\n",trade_ticket));
+                if(trade_ticket > 0)
                 {
                     //WriteTradeLog(new_trade);
                     AddTrade(new_trade);   
-                }
-                else
-                {
-                    made_price=0.0;
-                }
-                
+                }                
             }
             else
             {
                 PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakeTrade: Symbol %s: error in value. iHigh returned -1, couldn't find value in ltct period.",inst.symbol));
-                made_price=0.0;
             }
         }
         else
         {
             PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakeTrade: Symbol %s: error in index. iHighest returned -1, couldn't find index in ltct period.",inst.symbol));
-            made_price=0.0;
         }
     }
 
@@ -1525,32 +1383,29 @@ double MakeTrade(Instrument &inst,TradeType ttype)
             {
                 Trade new_trade;
                 new_trade.Clear();
-                made_price=MakePendingOrder(inst,ttype,new_trade);
-                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder returned made price = %f\n",made_price));
-                if(made_price > 0.0)
+                new_trade.trade_operation = TO_SELLSTOP;
+                new_trade.trade_type = TT_SEWT;
+                new_trade.comment = "lewt";
+                trade_ticket=MakePendingOrder(inst,new_trade);
+                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder returned trade ticket = %d\n",trade_ticket));
+                if(trade_ticket > 0.0)
                 {
                     //WriteTradeLog(new_trade);
                     AddTrade(new_trade);   
-                }
-                else
-                {
-                    made_price=0.0;
                 }
             }
             else
             {
                 PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakeTrade: Symbol %s: error in value. iHigh returned -1, couldn't find value in ltct period.",inst.symbol));
-                made_price=0.0;
             }
         }
         else
         {
             PrintMsg(DebugLogHandle,DB_LOW,StringFormat("OnStart: Symbol %s: error in index. iHighest returned -1, couldn't find index in ltct period.",inst.symbol));
-            made_price=0.0;
         }
     }
     //PrintMsg(DebugLogHandle,DB_MAX,StringFormat("MakeTrade returned %s ",(made_trade ? "true" : "false")));
-    return made_price; 
+    return trade_ticket;
 }
 /*--------------------------------------------------------------------------------------------------------------------*/
 int GetTradeIndexFromTicketNumber(int ticket_num)
@@ -2140,4 +1995,162 @@ void ReadTradesFromAccount()
         PrintMsg(DebugLogHandle,DB_LOW,StringFormat("ReadTradesFromAccount(): Trade[%d]:%s",pos,Trades[pos].AsString()));
        
     }
+}
+bool CalculateNewTradeValues(Instrument &inst, Trade &trade)
+{
+    //--- get minimum lot size
+    double mrkt_lot_size=MarketInfo(Symbol(),MODE_LOTSIZE);
+    double mrkt_lot_min=MarketInfo(Symbol(),MODE_MINLOT);
+    double mrkt_lot_max=MarketInfo(Symbol(),MODE_MAXLOT);
+    double mrkt_lot_step=MarketInfo(Symbol(),MODE_LOTSTEP);
+    double mrkt_min_stop_level=MarketInfo(Symbol(),MODE_STOPLEVEL);
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: Market: lot size=[%f],min lot size=[%f], max lot size=[%f], lot step=[%f], min stop level=[%f]",
+      mrkt_lot_size,mrkt_lot_min,mrkt_lot_max,mrkt_lot_step,mrkt_min_stop_level));
+      
+    double AccBalance=AccountBalance()/100;  // balance in pounds
+    double cash_risk=AccBalance/100.0; // 1%
+    double trade_price = 0.0;
+    double ATR15=iATR(inst.symbol,CONST_PERIOD,15,0);
+    double RV=2*ATR15;
+    // our risk in pips is RV_pips
+    double RV_pips= RV/inst.pip_location;
+    double volume = 0;
+    double ex_rate= 0;
+    if(inst.base_currency_chart=="GBP")
+    {
+        ex_rate=1;
+    }
+    else
+    {
+        ex_rate=Close[0];
+    }
+
+
+      
+    
+    double RV_money=((ex_rate>0)?((AccBalance*(CONST_TRADE_PERCENT_RISK/100))*ex_rate):0.0);
+    double PIP_value=((RV_pips >0)?(RV_money/RV_pips):0.0);
+    double Trade_size=PIP_value/inst.pip_location;
+    double Trade_size_MT4=Trade_size/inst.lot_size;
+    double Trade_size_MT4_rounded=floor(Trade_size_MT4*(1/mrkt_lot_min))/(1/mrkt_lot_min); // round down to 2 decimal places
+    if(Trade_size_MT4_rounded > mrkt_lot_max){Trade_size_MT4_rounded = mrkt_lot_max;}
+    
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: ATR15[%f]",ATR15));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: inst.base_currency_chart[%s]",inst.base_currency_chart));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: ex_rate[%f]",ex_rate));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: AccBalance[%f]",AccBalance));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: RV[%f]",RV));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: RV_pips[%f]",RV_pips));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: RV_money[%f]",RV_money));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: PIP_value[%f]",PIP_value));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: Trade_size[%f]",Trade_size));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: Trade_size_MT4[%f]",Trade_size_MT4));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: Trade_size_MT4_rounded[%f]",Trade_size_MT4_rounded));
+    
+    //*************************
+    double price = 0;
+    int slippage = 0;
+    double stoploss=0;
+    double takeprofit=0;
+    if(Trade_size_MT4_rounded==0)
+    {
+        PrintMsg(DebugLogHandle,DB_LOW,"CalculateNewTradeValues: Returned. NO TRADE SIZE AVAILABLE");
+    }
+    else
+    {
+
+    
+        //--- get minimum stop level
+        //--- calculated SL and TP prices must be normalized
+        double min_buy_stoploss=NormalizeDouble(Bid-mrkt_min_stop_level*Point,Digits);
+        double min_buy_takeprofit=NormalizeDouble(Bid+mrkt_min_stop_level*Point,Digits);
+    
+        trade.open_price = 0.0;
+        trade.symbol = Symbol();              
+        if(trade.trade_operation==TO_BUYSTOP)
+        {
+            int lewt_index=-1;
+            double lewt_value=-1;
+            lewt_index=iHighest(Symbol(),CONST_PERIOD,MODE_HIGH,CONST_EWT_PERIOD,0);
+            if(lewt_index>-1)
+            {
+                lewt_value=iHigh(Symbol(),CONST_PERIOD,lewt_index);
+                if(lewt_value>-1)
+                {
+                    price       =   NormalizeDouble(lewt_value,Digits);
+                    // check open price isn't too close to current price
+                    if((price-Ask) < NormalizeDouble(mrkt_min_stop_level*Point,Digits))
+                    {
+                        price += mrkt_min_stop_level*Point;
+                        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues(): Adjusted lewt price from %f to %f due to min stops. Ask[%f] Bid[%f]",lewt_value,price,Ask,Bid));
+                    }
+                    stoploss    =   NormalizeDouble(price-RV-(mrkt_min_stop_level*Point),Digits);
+                    takeprofit  =   NormalizeDouble(price+(RV*CONST_RV_MULTIPLIER)+(mrkt_min_stop_level*Point),Digits);
+                    if(takeprofit<0){takeprofit=0;}
+                }
+            }
+        }
+         //--- calculated SL and TP prices must be normalized
+        double min_sell_stoploss=NormalizeDouble(Ask-mrkt_min_stop_level*Point,Digits);
+        double min_sell_takeprofit=NormalizeDouble(Ask+mrkt_min_stop_level*Point,Digits);
+        if(trade.trade_operation==TO_SELLSTOP)
+        {
+            int sewt_index=-1;
+            double sewt_value=-1;
+            sewt_index=iLowest(Symbol(),CONST_PERIOD,MODE_LOW,CONST_EWT_PERIOD,0);
+            if(sewt_index>-1)
+            {
+                sewt_value=iLow(Symbol(),CONST_PERIOD,sewt_index);
+                if(sewt_value>-1)
+                {
+                    price       =  NormalizeDouble(sewt_value,Digits);
+                    // check open price isn't too close to current price
+                    if((Bid - price) < NormalizeDouble(mrkt_min_stop_level*Point,Digits))
+                    {
+                        price -= mrkt_min_stop_level*Point;
+                        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("Adjusted sewt price from %f to %f due to min stops. Ask[%f] Bid[%f]",sewt_value,price,Ask,Bid));
+                    }
+                    stoploss    =   NormalizeDouble(price+RV+(mrkt_min_stop_level*Point),Digits);
+                    takeprofit  =   NormalizeDouble(price-(RV*CONST_RV_MULTIPLIER)-(mrkt_min_stop_level*Point),Digits);
+                    if(takeprofit<0){takeprofit=0;}
+                }
+            }
+        }
+    }
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: price[%f]",price));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: stoploss[%f]",stoploss));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: takeprofit[%f]",takeprofit));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: volume[%f]",Trade_size_MT4_rounded));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: Ask[%f],Bid[%f]",Ask,Bid));
+
+    trade.volume = Trade_size_MT4_rounded;
+    trade.open_price = price;
+    trade.stoploss = 0;//stoploss;
+    trade.take_profit = 0;//takeprofit;
+    
+    bool values_ok = true;
+    /*
+    if(trade.open_price > 0.0 &&
+       trade.volume > 0.0 &&
+       trade.stoploss > 0.0 &&
+       trade.take_profit > 0.0)
+    {
+        values_ok = true;
+    }
+    
+    double trade_risk = 0.0;
+    double delta_price = 0.0;
+    if(trade.trade_operation == TO_BUYSTOP)
+    {
+        delta_price = trade.open_price - trade.stoploss;
+    }
+    else
+    {
+        delta_price = trade.stoploss - trade.open_price;
+        
+    }
+    double delta_price_in_base_curr = delta_price / ex_rate;
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues(): trade risk [%f] is %s allowed risk [%f]",delta_price_in_base_curr,(delta_price_in_base_curr>cash_risk?"greater":"less"),cash_risk));
+    */
+    return values_ok;
 }

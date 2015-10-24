@@ -105,9 +105,9 @@ Trade::Trade()
     symbol              = "";
     open_price          = 0.0;
     datetime zerotime   = 0;
-    open_time           = __DATETIME__;
+    open_time           = zerotime;
     close_price         = 0.0;
-    close_time          = __DATETIME__;
+    close_time          = zerotime;
     volume              = 0.0;
     stoploss            = 0.0;
     take_profit         = 0.0;
@@ -115,7 +115,7 @@ Trade::Trade()
     swap                = 0.0;
     profit              = 0.0;
     magic_number        = 0.0;
-    expiration_date     = __DATETIME__;
+    expiration_date     = zerotime;
     comment             = "";
     trade_type          = TT_INVALID;
     trade_operation     = TO_INVALID;
