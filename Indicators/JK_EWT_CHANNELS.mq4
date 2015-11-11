@@ -10,15 +10,13 @@
 //---- indicator settings
 #property indicator_chart_window
 #property indicator_buffers 2
-#property indicator_color1  Blue
-#property indicator_color2  Red
+#property indicator_color1 Blue
+#property indicator_color2 Blue
 //---- input parameters
-input int InpLEWTPeriod=10; 
-input int InpSEWTPeriod=10; 
-input int CONST_EWT_PERIOD = 10;
+input int CONST_EWT_PERIOD = 52;
 //---- indicator buffers
-double ExtBlueBuffer[];
-double ExtRedBuffer[];
+double ExtHighBuffer[];
+double ExtLowBuffer[];
 int EWT_HIGH[10000];
 int EWT_LOW[10000];
 //+------------------------------------------------------------------+
@@ -31,11 +29,11 @@ void OnInit(void)
    SetIndexShift(0,0);
    SetIndexShift(1,0);
 //---- first positions skipped when drawing
-   SetIndexDrawBegin(0,InpLEWTPeriod);
-   SetIndexDrawBegin(1,InpSEWTPeriod);
+   SetIndexDrawBegin(0,CONST_EWT_PERIOD);
+   SetIndexDrawBegin(1,CONST_EWT_PERIOD);
 //---- 3 indicator buffers mapping
-   SetIndexBuffer(0,ExtBlueBuffer);
-   SetIndexBuffer(1,ExtRedBuffer);
+   SetIndexBuffer(0,ExtHighBuffer);
+   SetIndexBuffer(1,ExtLowBuffer);
 //---- drawing settings
    SetIndexStyle(0,DRAW_LINE);
    SetIndexStyle(1,DRAW_LINE);
@@ -57,20 +55,23 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
-    int limit=rates_total-prev_calculated;
+    int limit = rates_total - prev_calculated;
+    limit += 2;
+    //Print("indicator limit = ",limit);
+    if(limit > 1000){limit = 1000;}
     //---- main loop
-    for(int bar = 0; bar<limit; bar++)
+    for(int bar = 0; bar < limit; bar++)
     {
-        EWT_HIGH[bar]   =iHighest(NULL,PERIOD_M1,MODE_HIGH,CONST_EWT_PERIOD,bar);
-        EWT_LOW[bar]    =iLowest (NULL,PERIOD_M1,MODE_LOW ,CONST_EWT_PERIOD,bar);
+        EWT_HIGH[bar]   =iHighest(NULL,Period(),MODE_HIGH,CONST_EWT_PERIOD,bar);
+        EWT_LOW[bar]    =iLowest (NULL,Period(),MODE_LOW ,CONST_EWT_PERIOD,bar);
     }
     //EWT_HIGH[0]   =EWT_HIGH[1];
     //EWT_LOW[0]    =EWT_LOW[1];
     
-    for(int i=0; i<limit; i++)
+    for(int i=0; i < limit; i++)
     {
-        ExtBlueBuffer[i]=High[EWT_HIGH[i]]; 
-        ExtRedBuffer[i] = Low[ EWT_LOW[i]]; 
+        ExtHighBuffer[i]=High[EWT_HIGH[i]]; 
+        ExtLowBuffer[i] = Low[ EWT_LOW[i]]; 
     }
 
     ChartRedraw();
