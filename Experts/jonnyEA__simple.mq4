@@ -19,9 +19,9 @@
 extern const int CONST_EWT_PERIOD = 21; 
 const int CONST_SMS_PERIOD = 52;
 // How much account balance % to risk per trade
-extern const double CONST_TRADE_PERCENT_RISK = 1; 
+extern const double CONST_TRADE_PERCENT_RISK = 1.0; 
  // take profit RV multiplier, used in calculating takeprofit
-extern const double CONST_RV_MULTIPLIER = 2.0;  
+extern const double CONST_SL_ATR_MULTIPLIER = 2.0;  
 // stop loss ATR multiplier, used in calculating stoploss
 extern const double CONST_TP_ATR_MULTIPLIER = 1.0;  
 // switch to toggel calculating of modified stop loss
@@ -32,6 +32,7 @@ extern const int CONST_SL_PIPS = 10;
 extern const int CONST_TP_PIPS = 10;
 
 const int CONST_NUM_SYMBOLS = 17; 
+
 Instrument Instrs[17];
 Instrument CurrentInstrument;
 int MAX_NUM_TRADES = 10;
@@ -110,17 +111,27 @@ int OpenDebugFile()
 //+------------------------------------------------------------------+
 void OnTick()
 {
-    
-    // check time of latest bar against time of last checked bar
-    if(last_bar_open_at != Time[0])
+    bool closeForWeekend = IsMarketClosingOrClosed();
+    if(closeForWeekend)
     {
-        // print time now
-        PrintFormat("------------------------- new bar found, time now = %s -----------------------",
-            TimeToString(TimeLocal(),TIME_DATE|TIME_SECONDS));
-        
-        last_bar_open_at = Time[0];
+        // close all open trades
+        CloseAllTrades();
+    }
+    else
+    {
+        // check time of latest bar against time of last checked bar
+        if(last_bar_open_at != Time[0])
+        {
+            // print time now
+            PrintFormat("------------------------- new bar found, time now = %s -----------------------",
+                TimeToString(TimeLocal(),TIME_DATE|TIME_SECONDS));
+            
+            last_bar_open_at = Time[0];
+            
+        }
         Start();
     }
+
 }
 /*------------------------------------------------------------------
  * Script program start function                                    
@@ -1153,7 +1164,7 @@ bool CalcNewSLTP(Instrument &inst,Trade &trade)
     
     // has the price moved into profit enough?
     double ATR15    =iATR(inst.symbol,CONST_PERIOD,15,0);
-    double RV       = CONST_RV_MULTIPLIER * ATR15;
+    double RV       = CONST_SL_ATR_MULTIPLIER * ATR15;
     
     if(trade.trade_operation == TO_BUY)
     {
@@ -1378,7 +1389,7 @@ void GetSLTP(Trade &trade,Instrument &inst, double &stoploss, double &takeprofit
 {
     // has the price moved into profit enough?
     double ATR15    = iATR(Symbol(),CONST_PERIOD,15,0);
-    double RV       = CONST_RV_MULTIPLIER * ATR15;
+    double RV       = CONST_SL_ATR_MULTIPLIER * ATR15;
     
     PrintMsg(DebugLogHandle,DB_LOW,StringFormat("GetSLTP: ATR15[%f]",ATR15));
     PrintMsg(DebugLogHandle,DB_LOW,StringFormat("GetSLTP: RV[%f]",RV));
@@ -1387,11 +1398,11 @@ void GetSLTP(Trade &trade,Instrument &inst, double &stoploss, double &takeprofit
     if(trade.trade_operation == TO_BUY || trade.trade_operation == TO_BUYSTOP )
     {
     //*********************
-        stoploss    =   trade.open_price - RV;
-        takeprofit  =   trade.open_price + NormalizeDouble(ATR15 * CONST_TP_ATR_MULTIPLIER,Digits);
+        //stoploss    =   trade.open_price - RV;
+        //takeprofit  =   trade.open_price + NormalizeDouble(ATR15 * CONST_TP_ATR_MULTIPLIER,Digits);
     //*********************
-        //stoploss    =   trade.open_price - CONST_SL_PIPS*Point; // 10 pips
-        //takeprofit  =   trade.open_price + CONST_TP_PIPS*Point; // 10 pips
+        stoploss    =   trade.open_price - CONST_SL_PIPS*Point; // 10 pips
+        takeprofit  =   trade.open_price + CONST_TP_PIPS*Point; // 10 pips
 
     //*********************
         //stoploss = trade.open_price - RV;
@@ -1401,11 +1412,11 @@ void GetSLTP(Trade &trade,Instrument &inst, double &stoploss, double &takeprofit
     else if(trade.trade_operation == TO_SELL  || trade.trade_operation == TO_SELLSTOP )
     {
     //*********************
-        stoploss    =   trade.open_price + RV;
-        takeprofit = trade.open_price - NormalizeDouble(ATR15 * CONST_TP_ATR_MULTIPLIER,Digits);
+        //stoploss    =   trade.open_price + RV;
+        //takeprofit = trade.open_price - NormalizeDouble(ATR15 * CONST_TP_ATR_MULTIPLIER,Digits);
     //*********************
-        //stoploss    =   trade.open_price + CONST_SL_PIPS*Point; // 10 pips
-        //takeprofit  =   trade.open_price - CONST_TP_PIPS*Point; // 10 pips
+        stoploss    =   trade.open_price + CONST_SL_PIPS*Point; // 10 pips
+        takeprofit  =   trade.open_price - CONST_TP_PIPS*Point; // 10 pips
 
     //*********************
 
@@ -1415,8 +1426,8 @@ void GetSLTP(Trade &trade,Instrument &inst, double &stoploss, double &takeprofit
         Alert(StringFormat("GetSLTP(): invalid trade operation. Expected BUY/BUYSTOP, SELL/SELLSTOP, got [%d]",trade.trade_operation));
     }
      
-    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("GetSLTP: stoploss[%f]",stoploss));
-    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("GetSLTP: takeprofit[%f]",takeprofit));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("GetSLTP: stoploss[%f] delta = [%f]",stoploss,CONST_SL_PIPS*Point ));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("GetSLTP: takeprofit[%f] delta = [%f]",takeprofit,CONST_TP_PIPS*Point));
     
 }
 
@@ -2008,8 +2019,8 @@ bool CalculateNewTradeValues(Instrument &inst, Trade &trade)
     double mrkt_lot_max=MarketInfo(Symbol(),MODE_MAXLOT);
     double mrkt_lot_step=MarketInfo(Symbol(),MODE_LOTSTEP);
     double mrkt_min_stop_level=MarketInfo(Symbol(),MODE_STOPLEVEL);
-    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: Market: lot size=[%f],min lot size=[%f], max lot size=[%f], lot step=[%f], min stop level=[%f]",
-      mrkt_lot_size,mrkt_lot_min,mrkt_lot_max,mrkt_lot_step,mrkt_min_stop_level));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: Market: symbol = %s, lot size=[%f],min lot size=[%f], max lot size=[%f], lot step=[%f], min stop level=[%f]",
+      Symbol(), mrkt_lot_size,mrkt_lot_min,mrkt_lot_max,mrkt_lot_step,mrkt_min_stop_level));
       
     // Account balance in GBP
     double AccBalance=AccountBalance();  // balance in pounds
@@ -2018,10 +2029,10 @@ bool CalculateNewTradeValues(Instrument &inst, Trade &trade)
     double ATR15=iATR(inst.symbol,CONST_PERIOD,15,0);
     PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: ATR15[%f]",ATR15));
     // relative volatility, our max risk.
-    double RV = CONST_RV_MULTIPLIER * ATR15;
+    double RV = CONST_SL_ATR_MULTIPLIER * ATR15;
     PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: max risk RV[%f] (CONST_RV_MULITIPLIER * ATR)",RV));
     // our risk in pips is RV_pips
-    double RV_pips= RV/inst.pip_location;
+    double RV_pips= 10;//RV/inst.pip_location;
     PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: max risk in pips RV_pips[%f]",RV_pips));
 
     double ex_rate= 0;
@@ -2060,7 +2071,7 @@ bool CalculateNewTradeValues(Instrument &inst, Trade &trade)
     // trade size rounded to MT4 values
     double Trade_size_MT4_rounded=floor(Trade_size_MT4*(1/mrkt_lot_min))/(1/mrkt_lot_min); // round down to 2 decimal places
     if(Trade_size_MT4_rounded > mrkt_lot_max){Trade_size_MT4_rounded = mrkt_lot_max;}
-    if(Trade_size_MT4_rounded == 0){Trade_size_MT4_rounded = mrkt_lot_min;}
+    //if(Trade_size_MT4_rounded == 0){Trade_size_MT4_rounded = mrkt_lot_min;}
     PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: Trade_size_MT4_rounded to MT4 values[%f]",Trade_size_MT4_rounded));
         
     //*************************
@@ -2159,9 +2170,10 @@ bool CalculateNewTradeValues(Instrument &inst, Trade &trade)
         if(trade.trade_type == TT_LEWT)
         {
             double this_trade_risk = (price - stoploss) * PIP_value;
+            Alert(StringFormat("LEWT trade has risk [%f]",this_trade_risk));
             if(this_trade_risk > risk_money)
             {
-                Alert(StringFormat("LEWT trade has risk greater than %d % of Account balance (balance = [%f], current risk = [%f] (%f %))",
+                Alert(StringFormat("LEWT trade has risk greater than %f% of Account balance (balance = [%f], current risk = [%f] (%f %))",
                     CONST_TRADE_PERCENT_RISK,AccBalance,this_trade_risk,(this_trade_risk/AccBalance)*100));
                 values_ok = false;
                 price = 0;
@@ -2172,6 +2184,7 @@ bool CalculateNewTradeValues(Instrument &inst, Trade &trade)
         if(trade.trade_type == TT_SEWT)
         {
             double this_trade_risk = (stoploss - price) * PIP_value;
+            Alert(StringFormat("SEWT trade has risk [%f]",this_trade_risk));
             if(this_trade_risk > risk_money)
             {
                 Alert(StringFormat("SEWT trade has risk greater than %d % of Account balance (balance = [%f], current risk = [%f] (%f %))",
@@ -2200,4 +2213,89 @@ bool CalculateNewTradeValues(Instrument &inst, Trade &trade)
     
 
     return values_ok;
+}
+bool IsMarketClosingOrClosed()
+{
+    bool closingorclosed = false;
+    // do not work on holidays. 
+    // Current zero-based day of the week (0-Sunday,1,2,3,4,5,6).
+    if(DayOfWeek()==0 || DayOfWeek()==6)
+    {
+        closingorclosed = true;
+    }
+    else if(DayOfWeek()==5)
+    {
+        // Its Friday, are we approaching market close?
+        datetime date_time=TimeLocal();
+        int HH=TimeHour(date_time);
+        if(HH >=12)
+        {
+            closingorclosed = true;
+        }
+    }
+
+    return closingorclosed;
+}
+void CloseAllTrades()
+{
+    // Get the number of market and pending orders
+    int active_orders = OrdersTotal();
+
+    while(active_orders > 0)
+    {
+        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CloseAllTrades(): Closing [%d] orders",active_orders));
+        for(int pos = 0; pos < active_orders; pos++)
+        {
+            bool result = false;
+            if(OrderSelect(pos,SELECT_BY_POS))
+            {
+                double ask , bid;
+                RefreshRates();
+                ask = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_ASK),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
+                bid = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_BID),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
+                
+                if(OrderType()==OP_BUY)
+                {
+                    for(int tries = 0; tries < 100; tries++)
+                    {
+                        result = OrderClose(OrderTicket(),OrderLots(),bid,3,Violet);
+                        if(result==true) 
+                        {
+                            break; 
+                        }
+                        else
+                        {
+                            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CloseAllTrades(): Couldn't close order [%d], retrying [%d]",OrderTicket(),tries));
+                            Sleep(500);
+                            RefreshRates();
+                            ask = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_ASK),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
+                            bid = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_BID),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));      
+                        }
+                    }
+                    
+                }
+                if(OrderType()==OP_SELL)
+                {
+                    for(int tries = 0; tries < 100; tries++)
+                    {
+                        result = OrderClose(OrderTicket(),OrderLots(),ask,3,Violet);
+                        if(result==true) 
+                        {
+                            break; 
+                        }
+                        else
+                        {
+                            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CloseAllTrades(): Couldn't close order [%d], retrying [%d]",OrderTicket(),tries));                        
+                            Sleep(500);
+                            RefreshRates();
+                            ask = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_ASK),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
+                            bid = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_BID),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));  
+                        }
+                    }
+                }
+            }
+            
+        }
+        active_orders = OrdersTotal();
+    }
 }
