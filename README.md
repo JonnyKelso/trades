@@ -1,6 +1,6 @@
 # trades
 
-This repo contains scripts for algorithmic trading on the mt4 platform.
+This repo contains scripts for algorithmic trading on the mt4 platform. http://www.metatrader4.com/
 
 # This is currently in development and should not be used on real life trading yet.
 
