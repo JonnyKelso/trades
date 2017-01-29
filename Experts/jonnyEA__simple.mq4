@@ -19,17 +19,17 @@
 extern const int CONST_EWT_PERIOD = 21; 
 const int CONST_SMS_PERIOD = 52;
 // How much account balance % to risk per trade
-extern const double CONST_TRADE_PERCENT_RISK = 1.0; 
+extern const double CONST_TRADE_PERCENT_RISK = 5.0; 
  // take profit RV multiplier, used in calculating takeprofit
 extern const double CONST_SL_ATR_MULTIPLIER = 2.0;  
 // stop loss ATR multiplier, used in calculating stoploss
-extern const double CONST_TP_ATR_MULTIPLIER = 1.0;  
+extern const double CONST_TP_ATR_MULTIPLIER = 2.0;  
 // switch to toggel calculating of modified stop loss
 //extern const bool CONST_USE_TRAILING_STOP = true;  
 // num pips to SL
 extern const int CONST_SL_PIPS = 10;
 // num pips to TP
-extern const int CONST_TP_PIPS = 10;
+extern const int CONST_TP_PIPS = 55;
 
 const int CONST_NUM_SYMBOLS = 17; 
 
@@ -38,6 +38,7 @@ Instrument CurrentInstrument;
 int MAX_NUM_TRADES = 10;
 Trade Trades[10];
 
+datetime LastUpdateTime = 0;
 const int CONST_MAX_ALLOW_TRADES = 2; // no more than this number of trades at any one time
 const int CONST_PERIOD = Period();
 const int CONST_EWT_HISTORY_PERIOD = 10000; // how many bars to go back in time when calculating EWT
@@ -71,11 +72,26 @@ const int CONST_DEBUG_LEVEL = DB_LOW;
 datetime last_run_datetime = 0;
 datetime last_bar_open_at = 0;
 
+bool NewBar = false;  // is this script running on the occurence of a new bar, or just an hourly run
+int SecondsInHour = 60 * 60;
+datetime ShortCyclePeriod = 4 * SecondsInHour;  // in seconds
+
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit()
 {
+    int res = OpenDebugFile();
+    if(res < 0)
+    {
+        Print("Error opening debug file");
+        return -1;
+    }
+    int read_instrs_result = ReadInstrsLog();
+    if(read_instrs_result < 0)
+    {
+        BuildInstrumentList();
+    }
     return(INIT_SUCCEEDED);
 }
 //+------------------------------------------------------------------+
@@ -95,7 +111,7 @@ int OpenDebugFile()
     string time_now_str = GetTimeNow();
     if(DebugLogHandle < 0)
     {
-        DebugLogFilename=StringFormat("UTP_DebugLog_%s.csv",time_now_str);
+        DebugLogFilename=StringFormat("UTP_DebugLog_%s_%s.csv",Symbol(),time_now_str);
         DebugLogHandle=FileOpen(DebugLogFilename,FILE_CSV|FILE_WRITE|FILE_ANSI);
     }
     if(DebugLogHandle==-1)
@@ -111,25 +127,50 @@ int OpenDebugFile()
 //+------------------------------------------------------------------+
 void OnTick()
 {
-    bool closeForWeekend = IsMarketClosingOrClosed();
-    if(closeForWeekend)
+    // check time of latest bar against time of last checked bar
+    bool run_now = false;
+    NewBar = false;
+    if(last_bar_open_at != Time[0])
     {
-        // close all open trades
-        CloseAllTrades();
+        NewBar = true;
+        PrintFormat("------------------------- new bar found, time now = %s -----------------------",
+            TimeToString(TimeLocal(),TIME_DATE|TIME_SECONDS));
+        
+        string mail_text = StringFormat("Running EA: %s T[%s]", Symbol(),TimeToString(TimeLocal(),TIME_DATE|TIME_SECONDS));
+        SendMail(mail_text,mail_text);
+
+        last_bar_open_at = Time[0];
+        
+        run_now = true;
+        //last_run_datetime = TimeLocal();
+        //Start();
     }
     else
     {
-        // check time of latest bar against time of last checked bar
-        if(last_bar_open_at != Time[0])
+        // check if its time to do another short cycle run
+        datetime time_since_run = TimeLocal() - last_run_datetime;
+        if( time_since_run > ShortCyclePeriod ) 
         {
-            // print time now
-            PrintFormat("------------------------- new bar found, time now = %s -----------------------",
-                TimeToString(TimeLocal(),TIME_DATE|TIME_SECONDS));
-            
-            last_bar_open_at = Time[0];
-            
+            NewBar = false;
+            run_now = true;
         }
-        Start();
+    }
+    
+    if(run_now)
+    {
+        bool closeForWeekend = IsMarketClosingOrClosed();
+        if(closeForWeekend)
+        {
+            // close all open trades
+            CloseAllTrades();
+        }
+        else
+        {
+    
+            last_run_datetime = TimeLocal();
+            Start();    
+            NewBar = false;
+        }
     }
 
 }
@@ -138,24 +179,11 @@ void OnTick()
  *------------------------------------------------------------------*/
 void Start()
 {
-    int res = OpenDebugFile();
-    if(res < 0)
-    {
-        Print("Error opening debug file");
-        Alert("Error opening debug file");
-        return;
-    }
-
-    // read logged instruments from file,
-    // or reinitialise a list of empty instruments if no log file exists.
-    int read_instrs_result = ReadInstrsLog();
-    if(read_instrs_result < 0)
-    {
-        BuildInstrumentList();
-    }
     //ReadTradesList();
     //ReadTradeLog();
     //PrintTradesList();
+    //string mail_text = StringFormat("Running EA: %s T[%s]", Symbol(),TimeToString(TimeLocal(),TIME_DATE|TIME_SECONDS));
+    //SendMail(mail_text,mail_text);
     
     // what symbol are we using, set the current Instrument.
     int instr_index = -1;
@@ -180,6 +208,14 @@ void Start()
     // read current open and pending orders from account
     // (closed and deleted orders won't appear here)
     ReadTradesFromAccount();
+    if( LastUpdateTime == 0){ LastUpdateTime = TimeLocal(); }
+    SendMailUpdates();
+    
+    if(!NewBar)
+    {
+        return;
+    }
+      
     //CheckInstrumentTradeTickets(CurrentInstrument);
     // get ticket numbers for lewt and sewt trades
     //double ewt_long_price = 0.0;
@@ -1277,10 +1313,10 @@ int MakePendingOrder(Instrument &inst,Trade &trade)
 int MakeTrade(Instrument &inst,TradeType ttype)
 {
     PrintMsg(DebugLogHandle,DB_MAX,StringFormat("MakeTrade called with\n symbol=%s ltc period = %d ttype=%d",Symbol(),ttype));
-    //bool made_trade=false;
-    int trade_ticket=0;
-    int index=-1;
-    double value=-1;
+
+    int trade_ticket    =  0;
+    int index           = -1;
+    double value        = -1;
 
     // LONG
     if(ttype==TT_LEWT || ttype==TT_LSMS)
@@ -1385,6 +1421,7 @@ int GetTradeIndexFromTicketNumber(int ticket_num)
     }
     return trade_index;
 }
+/*--------------------------------------------------------------------------------------------------------------------*/
 void GetSLTP(Trade &trade,Instrument &inst, double &stoploss, double &takeprofit)
 {
     // has the price moved into profit enough?
@@ -1401,12 +1438,12 @@ void GetSLTP(Trade &trade,Instrument &inst, double &stoploss, double &takeprofit
         //stoploss    =   trade.open_price - RV;
         //takeprofit  =   trade.open_price + NormalizeDouble(ATR15 * CONST_TP_ATR_MULTIPLIER,Digits);
     //*********************
-        stoploss    =   trade.open_price - CONST_SL_PIPS*Point; // 10 pips
-        takeprofit  =   trade.open_price + CONST_TP_PIPS*Point; // 10 pips
+        //stoploss    =   trade.open_price - CONST_SL_PIPS*Point; // 10 pips
+        //takeprofit  =   trade.open_price + CONST_TP_PIPS*Point; // 10 pips
 
     //*********************
-        //stoploss = trade.open_price - RV;
-        //takeprofit = trade.open_price + RV;
+        stoploss = trade.open_price - RV;
+        takeprofit = trade.open_price + RV;
         if(takeprofit < 0){ takeprofit = 0; }
     }
     else if(trade.trade_operation == TO_SELL  || trade.trade_operation == TO_SELLSTOP )
@@ -1415,10 +1452,12 @@ void GetSLTP(Trade &trade,Instrument &inst, double &stoploss, double &takeprofit
         //stoploss    =   trade.open_price + RV;
         //takeprofit = trade.open_price - NormalizeDouble(ATR15 * CONST_TP_ATR_MULTIPLIER,Digits);
     //*********************
-        stoploss    =   trade.open_price + CONST_SL_PIPS*Point; // 10 pips
-        takeprofit  =   trade.open_price - CONST_TP_PIPS*Point; // 10 pips
+        //stoploss    =   trade.open_price + CONST_SL_PIPS*Point; // 10 pips
+        //takeprofit  =   trade.open_price - CONST_TP_PIPS*Point; // 10 pips
 
     //*********************
+        stoploss = trade.open_price + RV;
+        takeprofit = trade.open_price - RV;
 
     }
     else
@@ -1426,110 +1465,11 @@ void GetSLTP(Trade &trade,Instrument &inst, double &stoploss, double &takeprofit
         Alert(StringFormat("GetSLTP(): invalid trade operation. Expected BUY/BUYSTOP, SELL/SELLSTOP, got [%d]",trade.trade_operation));
     }
      
-    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("GetSLTP: stoploss[%f] delta = [%f]",stoploss,CONST_SL_PIPS*Point ));
-    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("GetSLTP: takeprofit[%f] delta = [%f]",takeprofit,CONST_TP_PIPS*Point));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("GetSLTP: stoploss[%f]",stoploss));
+    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("GetSLTP: takeprofit[%f]",takeprofit));
     
 }
 
-/*--------------------------------------------------------------------------------------------------------------------*/
-// void CheckPlacedTrades()
-// {
-    // for (int index = 0; index < CONST_NUM_SYMBOLS; index++)
-    // {
-        // if(Instrs[index].lsms_trade > 0)
-        // {
-            // int ticket_no = Instrs[index].lsms_trade;
-            // int trade_index = GetTradeIndexFromTicketNumber(ticket_no);
-
-            // if(trade_index > -1 && Trades[trade_index].state != INVALID)
-            // {
-                // // operate on order, must 'select' it first
-                // bool selected = OrderSelect(ticket_no,SELECT_BY_TICKET);
-                // if(selected)
-                // {
-                    // // check the trade has the right symbol
-                    // if(OrderSymbol() == Instrs[index].symbol)
-                    // {
-                        // datetime close_time = OrderCloseTime():
-                        // if(close_time == 0)
-                        // {
-                            // // order is either pending or open
-                            // int order_type = OrderType();
-                            // if(order_type == OP_BUY || order_type == OP_SELL)
-                            // {
-                                // // order is open
-                                // if (Trades[trade_index].state == PENDING)
-                                // {
-                                    // // trade was pending, now open
-                                    // // record open price
-                                    // Trades[trade_index].open_price = OpenOrderPrice();
-                                    // // Trades[trade_index].comment;
-                                    // Trades[trade_index].is_filled = true;
-                                    // Trades[trade_index].trade_state = TS_OPEN;
-                                    // PrintMsg(DebugLogHandle,DB_MAX,StringFormat("open price for the order ticket number %d = %f ",Trades[trade_index].open_price);
-
-                                // }
-                                // if (Trades[trade_index].trade_state == OPEN)
-                                // {
-                                    // // trade was open, still open
-                                    // // adjust stop loss?
-                                // }
-                                // if (Trades[trade_index].trade_state == CLOSED || Trades[trade_index].trade_state == REPLACED)
-                                // {
-                                  // // trade state error!!!!
-                                  // PrintMsg(DebugLogHandle,DB_MAX,"Trade error, trade is open but state is set CLOSED or REPLACED");
-                                // }
-
-                            // }
-                            // else
-                            // {
-                                // if (Trades[trade_index].trade_state == PENDING)
-                                // {
-                                    // // order is still pending
-                                    // // adjust ewt/sms values
-
-                                // }
-
-                            // }
-                        // }
-                        // else
-                        // {
-                            // // order is closed
-                            // Trades[trade_index].open_price = OpenOrderPrice();
-                            // // Trades[trade_index].comment;
-                            // Trades[trade_index].is_filled = true;
-                            // Trades[trade_index].state = OPEN;
-                            // PrintMsg(DebugLogHandle,DB_MAX,StringFormat("open price for the order ticket number %d = %f ",Trades[trade_index].price);
-
-
-
-                        // }
-                    // }
-                // }
-                // else
-                // {
-                    // // order could not be selected
-                    // PrintMsg("DebugLogHandle",StringFormat("Trade error, order could not be selected. OrderSelect returned the error of %s",GetLastError()));
-                // }  
-            // }
-            
-
-
-
-            
-        // }
-        // if(Instrs[index].lewt_trade > 0)
-        // {
-        // }
-        // if(Instrs[index].sewt_trade > 0)
-        // {
-        // }
-        // if(Instrs[index].ssms_trade > 0)
-        // {
-        // }
-    // }
-
-// }
 /*--------------------------------------------------------------------------------------------------------------------*/
 void AddTrade(Trade &other)
 {
@@ -1599,10 +1539,14 @@ int GetNumberActiveTrades()
     int trade_count = 0;
     for(int index = 0; index < MAX_NUM_TRADES; ++index)
     {
-        if(Trades[index].trade_state == TS_OPEN || Trades[index].trade_state == TS_PENDING)
+        if(Trades[index].symbol == Symbol())
         {
-            trade_count++;
+            if(Trades[index].trade_state == TS_OPEN || Trades[index].trade_state == TS_PENDING)
+            {
+                trade_count++;
+            }
         }
+        
     }
     return trade_count;
 }
@@ -1659,7 +1603,8 @@ void CheckTrade(Trade &trade)
                             
                             //DrawOrderLine(trade);
                             // if current profit is above some threshold, move stoploss.
-                            ModifyOpenOrder(CurrentInstrument,trade);
+                           // ModifyOpenOrder(CurrentInstrument,trade);
+ 
                             
                         }
                         else
@@ -1767,7 +1712,8 @@ void CheckTrade(Trade &trade)
                             // update the stop-loss in light of new ATR.
                             
                             
-                            ModifyOpenOrder(CurrentInstrument,trade);
+                            //ModifyOpenOrder(CurrentInstrument,trade);
+
                         }
                     }
                     else
@@ -1812,12 +1758,12 @@ void CheckTrade(Trade &trade)
 
                 }
             }
-            else
-            {
-                // order symbol mismatch
-                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("Trade error, order does not have the same symbol as current instrument. Current Instr has %s, order has %s",CurrentInstrument.symbol,OrderSymbol()));
-                Alert(StringFormat("Trade error, order does not have the same symbol as current instrument. Current Instr has %s, order has %s",CurrentInstrument.symbol,OrderSymbol()));
-            }  
+            //else
+            //{
+            //    // order symbol mismatch
+            //    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("Trade error, order does not have the same symbol as current instrument. Current Instr has %s, order has %s",CurrentInstrument.symbol,OrderSymbol()));
+            //    Alert(StringFormat("Trade error, order does not have the same symbol as current instrument. Current Instr has %s, order has %s",CurrentInstrument.symbol,OrderSymbol()));
+            //}  
         }
         else
         {
@@ -1845,7 +1791,7 @@ int ModifyOpenOrder(Instrument &instr, Trade &trade)
     bool modify = CalcNewSLTP(instr,trade);
     if(modify)
     {
-        bool res = OrderModify(OrderTicket(),OrderOpenPrice(),trade.stoploss,trade.take_profit,0,0);
+        bool res = OrderModify(OrderTicket(),OrderOpenPrice(),trade.stoploss,trade.take_profit,0,clrBlue);
         if(!res)
         {
             PrintMsg(DebugLogHandle,DB_LOW,StringFormat("Error in OrderModify. Error = %s",GetLastError()));
@@ -1937,74 +1883,94 @@ void ReadTradesFromAccount()
             Alert(StringFormat("ReadTradesFromAccount(): Error: Couldn't read trade info, Error %s",GetLastError()));
             continue;
         }
-        TradeType type;
-        TradeOperation op;
-        TradeState state = TS_INVALID;
-        if(OrderType() == OP_BUY)
+        if(OrderSymbol() == Symbol())
         {
-            type = TT_LEWT;
-            op = TO_BUY;
-            state = TS_OPEN;
-        }
-        else if(OrderType() == OP_SELL)
-        {
-            type = TT_SEWT;
-            op = TO_SELL;
-            state = TS_OPEN;
-        }
-        else if(OrderType() == OP_BUYSTOP)
-        {
-            type = TT_LEWT;
-            op = TO_BUYSTOP;
-            state = TS_PENDING;
-        }
-        else if(OrderType() == OP_SELLSTOP)
-        {
-            type = TT_SEWT;
-            op = TO_SELLSTOP;
-            state = TS_PENDING;
-        }
-        else
-        {
-            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("ReadTradesFromAccount(): Error: Order type [%d] not recognised. %d",OrderType()));
-            Alert(StringFormat("ReadTradesFromAccount(): Error: Order type [%d] not recognised. %d",OrderType()));
-            type = TT_INVALID;
-            op = TO_INVALID;
-            state = TS_INVALID;
-        }
-        
-        if(state != TS_INVALID)
-        {
-            Trades[pos].ticket_number = OrderTicket();
-            Trades[pos].symbol = OrderSymbol();
-            Trades[pos].open_price = OrderOpenPrice();
-            Trades[pos].open_time = OrderOpenTime();
-            Trades[pos].close_price = OrderClosePrice();
-            Trades[pos].close_time = OrderCloseTime();
-            Trades[pos].volume = OrderLots();
-            Trades[pos].stoploss = OrderStopLoss();
-            Trades[pos].take_profit = OrderTakeProfit();
-            Trades[pos].commission = OrderCommission();
-            Trades[pos].swap = OrderSwap();
-            Trades[pos].profit = OrderProfit();
-            Trades[pos].magic_number = OrderMagicNumber();
-            Trades[pos].expiration_date = OrderExpiration();
-            Trades[pos].comment = OrderComment();
-            Trades[pos].trade_type = type;
-            Trades[pos].trade_operation = op;
-            if(OrderType() == OP_BUY || OrderType() == OP_SELL)
+            TradeType type;
+            TradeOperation op;
+            TradeState state = TS_INVALID;
+            if(OrderType() == OP_BUY)
             {
-                Trades[pos].is_filled = true;
+                type = TT_LEWT;
+                op = TO_BUY;
+                state = TS_OPEN;
+                if(OrderOpenTime() > LastUpdateTime)
+                {
+                    // retrieve profit and send email alert.
+                    int h=TimeHour(OrderOpenTime());
+                    int m=TimeMinute(OrderOpenTime());
+                    string mail_text = StringFormat("New Order %s OP_BUY: HM[%d:%d] T[%d] P[%f] B[%f]",Symbol(), h,m,OrderTicket(),OrderProfit(),AccountBalance());
+                    SendMail(mail_text,mail_text);
+                }
+            }
+            else if(OrderType() == OP_SELL)
+            {
+                type = TT_SEWT;
+                op = TO_SELL;
+                state = TS_OPEN;
+                if(OrderOpenTime() > LastUpdateTime)
+                {
+                    // retrieve profit and send email alert.
+                    int h=TimeHour(OrderOpenTime());
+                    int m=TimeMinute(OrderOpenTime());
+                    string mail_text = StringFormat("New Order %s OP_SELL: HM[%d:%d] T[%d] P[%f] B[%f]",Symbol(), h,m,OrderTicket(),OrderProfit(),AccountBalance());
+                    SendMail(mail_text,mail_text);
+                }
+            }
+            else if(OrderType() == OP_BUYSTOP)
+            {
+                type = TT_LEWT;
+                op = TO_BUYSTOP;
+                state = TS_PENDING;
+            }
+            else if(OrderType() == OP_SELLSTOP)
+            {
+                type = TT_SEWT;
+                op = TO_SELLSTOP;
+                state = TS_PENDING;
             }
             else
             {
-                Trades[pos].is_filled = false;
+                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("ReadTradesFromAccount(): Error: %s Order type [%d] not recognised. %d",Symbol(), OrderType()));
+                Alert(StringFormat("ReadTradesFromAccount(): Error: %s Order type [%d] not recognised. %d", Symbol(), OrderType()));
+                type = TT_INVALID;
+                op = TO_INVALID;
+                state = TS_INVALID;
             }
             
-            Trades[pos].trade_state = state;
-            Trades[pos].last_price = 0.0;
-            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("ReadTradesFromAccount(): Trade[%d]:%s",pos,Trades[pos].AsString()));
+            if(state != TS_INVALID)
+            {
+                Trades[pos].ticket_number = OrderTicket();
+                Trades[pos].symbol = OrderSymbol();
+                Trades[pos].open_price = OrderOpenPrice();
+                Trades[pos].open_time = OrderOpenTime();
+                Trades[pos].close_price = OrderClosePrice();
+                Trades[pos].close_time = OrderCloseTime();
+                Trades[pos].volume = OrderLots();
+                Trades[pos].stoploss = OrderStopLoss();
+                Trades[pos].take_profit = OrderTakeProfit();
+                Trades[pos].commission = OrderCommission();
+                Trades[pos].swap = OrderSwap();
+                Trades[pos].profit = OrderProfit();
+                Trades[pos].magic_number = OrderMagicNumber();
+                Trades[pos].expiration_date = OrderExpiration();
+                Trades[pos].comment = OrderComment();
+                Trades[pos].trade_type = type;
+                Trades[pos].trade_operation = op;
+                if(OrderType() == OP_BUY || OrderType() == OP_SELL)
+                {
+                    Trades[pos].is_filled = true;
+                }
+                else
+                {
+                    Trades[pos].is_filled = false;
+                }
+                
+                Trades[pos].trade_state = state;
+                Trades[pos].last_price = 0.0;
+                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("ReadTradesFromAccount(): Trade[%d]:%s",pos,Trades[pos].AsString()));
+            }
         }
+
 
 
     }
@@ -2014,13 +1980,19 @@ bool CalculateNewTradeValues(Instrument &inst, Trade &trade)
     bool values_ok = true;
     
     //--- get minimum lot size
-    double mrkt_lot_size=MarketInfo(Symbol(),MODE_LOTSIZE);
-    double mrkt_lot_min=MarketInfo(Symbol(),MODE_MINLOT);
-    double mrkt_lot_max=MarketInfo(Symbol(),MODE_MAXLOT);
-    double mrkt_lot_step=MarketInfo(Symbol(),MODE_LOTSTEP);
-    double mrkt_min_stop_level=MarketInfo(Symbol(),MODE_STOPLEVEL);
+    double mrkt_lot_size        = MarketInfo(Symbol(),MODE_LOTSIZE);
+    double mrkt_lot_min         = MarketInfo(Symbol(),MODE_MINLOT);
+    double mrkt_lot_max         = MarketInfo(Symbol(),MODE_MAXLOT);
+    double mrkt_lot_step        = MarketInfo(Symbol(),MODE_LOTSTEP);
+    double mrkt_min_stop_level  = MarketInfo(Symbol(),MODE_STOPLEVEL);
+    
     PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: Market: symbol = %s, lot size=[%f],min lot size=[%f], max lot size=[%f], lot step=[%f], min stop level=[%f]",
-      Symbol(), mrkt_lot_size,mrkt_lot_min,mrkt_lot_max,mrkt_lot_step,mrkt_min_stop_level));
+      Symbol(), 
+      mrkt_lot_size,
+      mrkt_lot_min,                  
+      mrkt_lot_max,
+      mrkt_lot_step,
+      mrkt_min_stop_level));
       
     // Account balance in GBP
     double AccBalance=AccountBalance();  // balance in pounds
@@ -2032,7 +2004,7 @@ bool CalculateNewTradeValues(Instrument &inst, Trade &trade)
     double RV = CONST_SL_ATR_MULTIPLIER * ATR15;
     PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: max risk RV[%f] (CONST_RV_MULITIPLIER * ATR)",RV));
     // our risk in pips is RV_pips
-    double RV_pips= 10;//RV/inst.pip_location;
+    double RV_pips= RV/inst.pip_location;
     PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CalculateNewTradeValues: max risk in pips RV_pips[%f]",RV_pips));
 
     double ex_rate= 0;
@@ -2170,10 +2142,10 @@ bool CalculateNewTradeValues(Instrument &inst, Trade &trade)
         if(trade.trade_type == TT_LEWT)
         {
             double this_trade_risk = (price - stoploss) * PIP_value;
-            Alert(StringFormat("LEWT trade has risk [%f]",this_trade_risk));
+            //Alert(StringFormat("LEWT trade has risk [%f]",this_trade_risk));
             if(this_trade_risk > risk_money)
             {
-                Alert(StringFormat("LEWT trade has risk greater than %f% of Account balance (balance = [%f], current risk = [%f] (%f %))",
+                Alert(StringFormat("LEWT trade has risk greater than [%f] percent of Account balance (balance = [%f], current risk = [%f] (%f percent))",
                     CONST_TRADE_PERCENT_RISK,AccBalance,this_trade_risk,(this_trade_risk/AccBalance)*100));
                 values_ok = false;
                 price = 0;
@@ -2184,10 +2156,10 @@ bool CalculateNewTradeValues(Instrument &inst, Trade &trade)
         if(trade.trade_type == TT_SEWT)
         {
             double this_trade_risk = (stoploss - price) * PIP_value;
-            Alert(StringFormat("SEWT trade has risk [%f]",this_trade_risk));
+            //Alert(StringFormat("SEWT trade has risk [%f]",this_trade_risk));
             if(this_trade_risk > risk_money)
             {
-                Alert(StringFormat("SEWT trade has risk greater than %d % of Account balance (balance = [%f], current risk = [%f] (%f %))",
+                Alert(StringFormat("SEWT trade has risk greater than [%f] percent of Account balance (balance = [%f], current risk = [%f] (%f percent))",
                     CONST_TRADE_PERCENT_RISK,AccBalance,this_trade_risk,(this_trade_risk/AccBalance)*100));
                 values_ok = false;
                 price = 0;
@@ -2217,21 +2189,28 @@ bool CalculateNewTradeValues(Instrument &inst, Trade &trade)
 bool IsMarketClosingOrClosed()
 {
     bool closingorclosed = false;
+    datetime date_time=TimeLocal();
+    int HH=TimeHour(date_time);
     // do not work on holidays. 
     // Current zero-based day of the week (0-Sunday,1,2,3,4,5,6).
-    if(DayOfWeek()==0 || DayOfWeek()==6)
+    if(DayOfWeek()==0) //sunday
     {
-        closingorclosed = true;
-    }
-    else if(DayOfWeek()==5)
-    {
-        // Its Friday, are we approaching market close?
-        datetime date_time=TimeLocal();
-        int HH=TimeHour(date_time);
-        if(HH >=12)
+        if(HH <= 22) // markets open 22:05, catch first trade at 23:00 ish
         {
             closingorclosed = true;
         }
+    }
+    else if(DayOfWeek()==5) //friday
+    {
+        // Its Friday, are we approaching market close?
+        if(HH >=20) // market closes at 22:00, stop a bit early to close all trades.
+        {
+            closingorclosed = true;
+        }
+    }
+    else if(DayOfWeek() == 6) // Saturday, market closed all day. Go out and do something less boring instead.
+    {
+        closingorclosed = true;
     }
 
     return closingorclosed;
@@ -2243,53 +2222,90 @@ void CloseAllTrades()
 
     while(active_orders > 0)
     {
-        PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CloseAllTrades(): Closing [%d] orders",active_orders));
+
         for(int pos = 0; pos < active_orders; pos++)
         {
             bool result = false;
             if(OrderSelect(pos,SELECT_BY_POS))
             {
-                double ask , bid;
-                RefreshRates();
-                ask = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_ASK),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
-                bid = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_BID),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
-                
-                if(OrderType()==OP_BUY)
+                // only close the orders raised on this symbol
+                if(OrderSymbol() == Symbol())
                 {
-                    for(int tries = 0; tries < 100; tries++)
+                    PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CloseAllTrades(): Closing [%d] orders",active_orders));
+                    double ask , bid;
+                    RefreshRates();
+                    ask = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_ASK),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
+                    bid = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_BID),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
+                    
+                    if(OrderType()==OP_BUY)
                     {
-                        result = OrderClose(OrderTicket(),OrderLots(),bid,3,Violet);
-                        if(result==true) 
+                        for(int tries = 0; tries < 100; tries++)
                         {
-                            break; 
+                            result = OrderClose(OrderTicket(),OrderLots(),bid,3,Violet);
+                            if(result==true) 
+                            {
+                                break; 
+                            }
+                            else
+                            {
+                                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CloseAllTrades(): Couldn't close order [%d], retrying [%d]",OrderTicket(),tries));
+                                Sleep(500);
+                                RefreshRates();
+                                ask = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_ASK),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
+                                bid = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_BID),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));      
+                            }
                         }
-                        else
+                        
+                    }
+                    if(OrderType() == OP_BUYSTOP)
+                    {
+                        for(int tries = 0; tries < 100; tries++)
                         {
-                            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CloseAllTrades(): Couldn't close order [%d], retrying [%d]",OrderTicket(),tries));
-                            Sleep(500);
-                            RefreshRates();
-                            ask = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_ASK),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
-                            bid = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_BID),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));      
+                            result = OrderDelete(OrderTicket(),Violet);
+                            if(result==true) 
+                            {
+                                break; 
+                            }
+                            else
+                            {
+                                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CloseAllTrades(): Couldn't close order [%d], retrying [%d]",OrderTicket(),tries));                        
+                                Sleep(500);
+                            }
                         }
                     }
-                    
-                }
-                if(OrderType()==OP_SELL)
-                {
-                    for(int tries = 0; tries < 100; tries++)
+                    if(OrderType()==OP_SELL)
                     {
-                        result = OrderClose(OrderTicket(),OrderLots(),ask,3,Violet);
-                        if(result==true) 
+                        for(int tries = 0; tries < 100; tries++)
                         {
-                            break; 
+                            result = OrderClose(OrderTicket(),OrderLots(),ask,3,Violet);
+                            if(result==true) 
+                            {
+                                break; 
+                            }
+                            else
+                            {
+                                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CloseAllTrades(): Couldn't close order [%d], retrying [%d]",OrderTicket(),tries));                        
+                                Sleep(500);
+                                RefreshRates();
+                                ask = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_ASK),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
+                                bid = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_BID),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));  
+                            }
                         }
-                        else
+                    }
+                    if(OrderType() == OP_SELLSTOP)
+                    {
+                        for(int tries = 0; tries < 100; tries++)
                         {
-                            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CloseAllTrades(): Couldn't close order [%d], retrying [%d]",OrderTicket(),tries));                        
-                            Sleep(500);
-                            RefreshRates();
-                            ask = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_ASK),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
-                            bid = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_BID),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));  
+                            result = OrderDelete(OrderTicket(),Violet);
+                            if(result==true) 
+                            {
+                                break; 
+                            }
+                            else
+                            {
+                                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CloseAllTrades(): Couldn't close order [%d], retrying [%d]",OrderTicket(),tries));                        
+                                Sleep(500);
+                            }
                         }
                     }
                 }
@@ -2298,4 +2314,58 @@ void CloseAllTrades()
         }
         active_orders = OrdersTotal();
     }
+}
+void SendMailUpdates()
+{
+    // retrieving info from trade history 
+    int hstTotal = OrdersHistoryTotal();
+    string mail_text = "";
+    int open = 0;
+    int closed = 0;
+    for(int i = 0; i < hstTotal; i++) 
+    { 
+        // Select order from history
+        if(OrderSelect(i,SELECT_BY_POS,MODE_HISTORY)) 
+        { 
+            // Check we have the right symbol
+            if(OrderSymbol() == Symbol())
+            {
+                // Was the order filled
+                if(OrderType() == OP_BUY || OrderType() == OP_SELL)
+                {
+                    // Was the order closed?
+                    if( OrderCloseTime() > LastUpdateTime )
+                    {
+                        // retrieve profit and send email alert.
+                        int h=TimeHour(TimeLocal());
+                        int m=TimeMinute(TimeLocal());
+                        mail_text += StringFormat("CLOSED %s P[%f]-B[%f]-T[%d]  T[%d:%d]\n",Symbol(),OrderProfit(),AccountBalance(),OrderTicket(),h,m);
+                        SendMail(mail_text,mail_text);
+                        closed++;
+                    }
+                    else
+                    {
+                        // retrieve profit and send email alert.
+                        //int h=TimeHour(TimeLocal());
+                        //int m=TimeMinute(TimeLocal());
+                        //mail_text += StringFormat("OPEN %s P[%f]-B[%f]-T[%d]  T[%d:%d]\n",Symbol(),OrderProfit(),AccountBalance(),OrderTicket(),h,m);
+                        //SendMail(mail_text,mail_text);
+                        //open++;
+                    }
+                }
+            }
+        }
+        else
+        {
+            int error=GetLastError();
+            mail_text += StringFormat("SendingMail: Access to history failed with error : [%d] description: [%s]",
+                    error,ErrorDescription(error));
+            PrintMsg(DebugLogHandle,DB_LOW,mail_text);      
+            SendMail(mail_text,mail_text);
+            break; 
+        } 
+    }
+    //string subject = StringFormat("%s OPEN[%d] CLOSED[%d]",Symbol(),open, closed);
+    //SendMail(subject,mail_text);
+    LastUpdateTime = TimeLocal();
 }
