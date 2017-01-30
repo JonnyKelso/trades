@@ -1,0 +1,5 @@
+"MakePendingOrder: OrderSend:Symbol[%s],cmd[%d],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
+"order went from pending to close before update.. open price for the order ticket number %d = %f ",trade.ticket_number,trade.open_price));
+"close price for the order ticket number %d = %f ",trade.ticket_number,trade.close_price));
+"close price for the order ticket number %d = %f ",trade.close_price));
+"profit on order ticket number %d was %f",trade.ticket_number,trade.profit ));

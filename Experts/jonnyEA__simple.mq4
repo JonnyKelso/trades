@@ -1,16 +1,16 @@
-//+------------------------------------------------------------------+
-//|                                                    jonnyEA_simple.mq4 |
-//|                                     Jonny Kelso, Copyright 2015. |
-//|                                             https://www.mql4.com |
-//+------------------------------------------------------------------+
+//+------------------------------------------------------------+
+//|                                         jonnyEA_simple.mq4 |
+//|                               Jonny Kelso, Copyright 2015. |
+//|                                       https://www.mql4.com |
+//+------------------------------------------------------------+
 #property copyright "Jonny Kelso, Copyright 2015."
 #property link      "https://www.mql4.com"
-#property version   "1.00"
+#property version   "1.01-alpha"
 #property strict
 
 #include <stderror.mqh>
 #include <stdlib.mqh>
-#include "Instrument.mqh"
+#include "Instrument.mqh" 
 #include "Trade.mqh"
 
 
@@ -1272,26 +1272,42 @@ int MakePendingOrder(Instrument &inst,Trade &trade)
     {
         if((GetNumberActiveTrades() >= CONST_MAX_ALLOW_TRADES) && (cmd > -1))
         {
-          PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: Returned. Maximum number of trades reached %d\n", CONST_MAX_ALLOW_TRADES));
+          PrintMsg(DebugLogHandle,DB_LOW,
+              StringFormat("MakePendingOrder: Returned. Maximum number of trades reached %d\n", 
+                CONST_MAX_ALLOW_TRADES));
         }
         else
         {
-            int ticket = OrderSend(Symbol(),cmd,trade.volume,trade.open_price,0,trade.stoploss,trade.take_profit,trade.comment,0,0,clrWhite);
-            PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[%d],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
-                                            Symbol(),trade.trade_operation,trade.volume,trade.open_price,trade.stoploss,trade.take_profit,trade.comment));
+            int ticket = OrderSend(Symbol(),
+                                        cmd,
+                                        trade.volume,
+                                        trade.open_price,
+                                        0,
+                                        trade.stoploss,
+                                        trade.take_profit,
+                                        trade.comment,
+                                        0,
+                                        0,
+                                        clrWhite);
             
             if(ticket<0)
             {
                 int error=GetLastError();
-                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend:Symbol[%s], ERROR placing trade: [%d] description: [%s]",
-                    Symbol(),error,ErrorDescription(error)));
+                PrintMsg(DebugLogHandle,DB_LOW,
+                    StringFormat("MakePendingOrder: OrderSend:Symbol[%s], ERROR placing trade: [%d] description: [%s]",
+                      Symbol(),error,ErrorDescription(error)));
                 Alert(StringFormat("MakePendingOrder: OrderSend:Symbol[%s], ERROR placing trade: [%d] description: [%s]",
                     Symbol(),error,ErrorDescription(error)));
             }
             else
             {
+                PrintMsg(DebugLogHandle,DB_LOW,
+                    StringFormat("MakePendingOrder: OrderSend:Symbol[%s],cmd[%d],volume[%f],price[%f],slippage[0],stoploss[%f],takeprofit[%f],comment[%s],magic[0],expiration[0],color[clrGreen]",
+                        Symbol(),trade.trade_operation,trade.volume,trade.open_price, trade.stoploss,trade.take_profit,trade.comment));
                 trade_placed = true;
-                PrintMsg(DebugLogHandle,DB_LOW,StringFormat("MakePendingOrder: OrderSend placed successfully. [%s] Ticket no:[%d]",trade.comment,ticket));
+                PrintMsg(DebugLogHandle,DB_LOW,
+                    StringFormat("MakePendingOrder: OrderSend placed successfully. [%s] Ticket no:[%d]",
+                      trade.comment,ticket));
                 if(trade.trade_operation == TO_BUYSTOP){inst.lewt_trade=ticket;}
                 if(trade.trade_operation == TO_SELLSTOP){inst.sewt_trade=ticket;}
                 //Trade trade;
@@ -1304,7 +1320,8 @@ int MakePendingOrder(Instrument &inst,Trade &trade)
     
 
  
-    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("MakePendingOrder: returned trade_placed = %s",(trade_placed ? "true" : "false")));
+    PrintMsg(DebugLogHandle,DB_MAX,StringFormat("MakePendingOrder: returned trade_placed = %s",
+          (trade_placed ? "true" : "false")));
 
     return trade.ticket_number;
 }
@@ -1603,9 +1620,77 @@ void CheckTrade(Trade &trade)
                             
                             //DrawOrderLine(trade);
                             // if current profit is above some threshold, move stoploss.
-                           // ModifyOpenOrder(CurrentInstrument,trade);
+                            ModifyOpenOrder(CurrentInstrument,trade);
  
+                            // Has the current price reached the opposite
+                            // indicator line?
+                            // If so, close the trade
+                            int current_bar = 0;
+                            RefreshRates();
+                            double ask , bid;
+                            ask = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_ASK),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
+                            bid = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_BID),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
                             
+                            if(order_type == OP_SELL)
+                            {
+                                int ewt_index     = iHighest(symbol,CONST_PERIOD,MODE_HIGH,CONST_EWT_PERIOD,current_bar);
+                                double ewt_value  = iHigh(symbol,CONST_PERIOD,ewt_index);
+                                if(bid >= ewt_value)
+                                {
+                                  // we have reached the opposing EWT indicator line
+                                  // Close the trade
+
+                                  PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CheckTrade(): Closing ticket [%d] - reached opposing indicator line",
+                                        trade.ticket_number));
+                                  for(int tries = 0; tries < 100; tries++)
+                                  {
+                                    result = OrderClose(OrderTicket(),OrderLots(),ask,3,Violet);
+                                    if(result==true) 
+                                    {
+                                      break; 
+                                    }
+                                    else
+                                    {
+                                      PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CheckTrade(): Couldn't close order [%d], retrying [%d]",OrderTicket(),tries));                        
+                                      Sleep(500);
+                                      RefreshRates();
+                                      ask = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_ASK),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
+                                      bid = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_BID),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));  
+                                    }
+                                  }
+                    
+                                }
+                            }
+                            else
+                            {
+                                int ewt_index     = iLowest(symbol,CONST_PERIOD,MODE_LOW,CONST_EWT_PERIOD,current_bar);
+                                double ewt_value  = iLow(symbol,CONST_PERIOD,ewt_index);
+                                if(ask <= ewt_value)
+                                {
+                                  // we have reached the opposing EWT indicator line
+                                  // Closing the trade
+                                  
+                                  PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CheckTrade(): Closing ticket [%d] - reached opposing indicator line",
+                                        trade.ticket_number));
+                                  
+                                  for(int tries = 0; tries < 100; tries++)
+                                  {
+                                    result = OrderClose(OrderTicket(),OrderLots(),bid,3,Violet);
+                                    if(result==true) 
+                                    {
+                                      break; 
+                                    }
+                                    else
+                                    {
+                                      PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CloseAllTrades(): Couldn't close order [%d], retrying [%d]",OrderTicket(),tries));
+                                      Sleep(500);
+                                      RefreshRates();
+                                      ask = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_ASK),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
+                                      bid = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_BID),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));      
+                                    }
+                                  }
+                                }
+                            }
                         }
                         else
                         {
@@ -1712,8 +1797,78 @@ void CheckTrade(Trade &trade)
                             // update the stop-loss in light of new ATR.
                             
                             
-                            //ModifyOpenOrder(CurrentInstrument,trade);
+                            ModifyOpenOrder(CurrentInstrument,trade);
+//                            CheckIfReachedIndicator(trade.ticket_number);
+                                                        
 
+                        }
+                        // Has the current price reached the opposite
+                        // indicator line?
+                        // If so, close the trade
+                        int current_bar = 0;
+                        RefreshRates();
+                        double ask , bid;
+                        ask = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_ASK),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
+                        bid = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_BID),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
+                           
+                        if(order_type == OP_SELL)
+                        {
+                            int ewt_index     = iHighest(symbol,CONST_PERIOD,MODE_HIGH,CONST_EWT_PERIOD,current_bar);
+                            double ewt_value  = iHigh(symbol,CONST_PERIOD,ewt_index);
+                            if(bid >= ewt_value)
+                            {
+                              // we have reached the opposing EWT indicator line
+                               // Close the trade
+
+                              PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CheckTrade(): Closing ticket [%d] - reached opposing indicator line",
+                                     trade.ticket_number));
+                              for(int tries = 0; tries < 100; tries++)
+                              {
+                                result = OrderClose(OrderTicket(),OrderLots(),ask,3,Violet);
+                                if(result==true) 
+                                {
+                                  break; 
+                                }
+                                else
+                                {
+                                  PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CheckTrade(): Couldn't close order [%d], retrying [%d]",OrderTicket(),tries));                        
+                                  Sleep(500);
+                                  RefreshRates();
+                                  ask = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_ASK),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
+                                  bid = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_BID),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));  
+                                }
+                              }
+                            }
+                        }
+                        else
+                        {
+                            int ewt_index     = iLowest(symbol,CONST_PERIOD,MODE_LOW,CONST_EWT_PERIOD,current_bar);
+                            double ewt_value  = iLow(symbol,CONST_PERIOD,ewt_index);
+                            if(ask <= ewt_value)
+                            {
+                              // we have reached the opposing EWT indicator line
+                              // Closing the trade
+                              
+                              PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CheckTrade(): Closing ticket [%d] - reached opposing indicator line",
+                                    trade.ticket_number));
+                              
+                              for(int tries = 0; tries < 100; tries++)
+                              {
+                                result = OrderClose(OrderTicket(),OrderLots(),bid,3,Violet);
+                                if(result==true) 
+                                {
+                                  break; 
+                                }
+                                else
+                                {
+                                  PrintMsg(DebugLogHandle,DB_LOW,StringFormat("CloseAllTrades(): Couldn't close order [%d], retrying [%d]",OrderTicket(),tries));
+                                  Sleep(500);
+                                  RefreshRates();
+                                  ask = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_ASK),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));
+                                  bid = NormalizeDouble(MarketInfo(OrderSymbol(),MODE_BID),(int)MarketInfo(OrderSymbol(),MODE_DIGITS));      
+                                }
+                              }
+                            }
                         }
                     }
                     else
@@ -2131,8 +2286,8 @@ bool CalculateNewTradeValues(Instrument &inst, Trade &trade)
         trade.open_price = price;
         GetSLTP(trade,inst,sl,tp);
         stoploss = sl;
-        takeprofit = tp;
-        if(stoploss <= 0.0 || takeprofit <= 0.0)
+        takeprofit = 0; //tp; // we're going to stop when (if) we reach the opposing indicator line
+        if(stoploss <= 0.0) //|| takeprofit <= 0.0)  
         {
             values_ok = false; // no trade without stops
             price = 0;
