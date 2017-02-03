@@ -5,7 +5,7 @@
 //+------------------------------------------------------------+
 #property copyright "Jonny Kelso, Copyright 2015."
 #property link      "https://www.mql4.com"
-#property version   "1.01-alpha"
+//#property version   "001.001"
 #property strict
 
 #include <stderror.mqh>
@@ -1633,8 +1633,8 @@ void CheckTrade(Trade &trade)
                             
                             if(order_type == OP_SELL)
                             {
-                                int ewt_index     = iHighest(symbol,CONST_PERIOD,MODE_HIGH,CONST_EWT_PERIOD,current_bar);
-                                double ewt_value  = iHigh(symbol,CONST_PERIOD,ewt_index);
+                                int ewt_index     = iHighest(Symbol(),CONST_PERIOD,MODE_HIGH,CONST_EWT_PERIOD,current_bar);
+                                double ewt_value  = iHigh(Symbol(),CONST_PERIOD,ewt_index);
                                 if(bid >= ewt_value)
                                 {
                                   // we have reached the opposing EWT indicator line
@@ -1644,7 +1644,7 @@ void CheckTrade(Trade &trade)
                                         trade.ticket_number));
                                   for(int tries = 0; tries < 100; tries++)
                                   {
-                                    result = OrderClose(OrderTicket(),OrderLots(),ask,3,Violet);
+                                    bool result = OrderClose(OrderTicket(),OrderLots(),ask,3,Violet);
                                     if(result==true) 
                                     {
                                       break; 
@@ -1663,8 +1663,8 @@ void CheckTrade(Trade &trade)
                             }
                             else
                             {
-                                int ewt_index     = iLowest(symbol,CONST_PERIOD,MODE_LOW,CONST_EWT_PERIOD,current_bar);
-                                double ewt_value  = iLow(symbol,CONST_PERIOD,ewt_index);
+                                int ewt_index     = iLowest(Symbol(),CONST_PERIOD,MODE_LOW,CONST_EWT_PERIOD,current_bar);
+                                double ewt_value  = iLow(Symbol(),CONST_PERIOD,ewt_index);
                                 if(ask <= ewt_value)
                                 {
                                   // we have reached the opposing EWT indicator line
@@ -1675,7 +1675,7 @@ void CheckTrade(Trade &trade)
                                   
                                   for(int tries = 0; tries < 100; tries++)
                                   {
-                                    result = OrderClose(OrderTicket(),OrderLots(),bid,3,Violet);
+                                    bool result = OrderClose(OrderTicket(),OrderLots(),bid,3,Violet);
                                     if(result==true) 
                                     {
                                       break; 
@@ -1813,8 +1813,8 @@ void CheckTrade(Trade &trade)
                            
                         if(order_type == OP_SELL)
                         {
-                            int ewt_index     = iHighest(symbol,CONST_PERIOD,MODE_HIGH,CONST_EWT_PERIOD,current_bar);
-                            double ewt_value  = iHigh(symbol,CONST_PERIOD,ewt_index);
+                            int ewt_index     = iHighest(Symbol(),CONST_PERIOD,MODE_HIGH,CONST_EWT_PERIOD,current_bar);
+                            double ewt_value  = iHigh(Symbol(),CONST_PERIOD,ewt_index);
                             if(bid >= ewt_value)
                             {
                               // we have reached the opposing EWT indicator line
@@ -1824,7 +1824,7 @@ void CheckTrade(Trade &trade)
                                      trade.ticket_number));
                               for(int tries = 0; tries < 100; tries++)
                               {
-                                result = OrderClose(OrderTicket(),OrderLots(),ask,3,Violet);
+                                bool result = OrderClose(OrderTicket(),OrderLots(),ask,3,Violet);
                                 if(result==true) 
                                 {
                                   break; 
@@ -1842,8 +1842,8 @@ void CheckTrade(Trade &trade)
                         }
                         else
                         {
-                            int ewt_index     = iLowest(symbol,CONST_PERIOD,MODE_LOW,CONST_EWT_PERIOD,current_bar);
-                            double ewt_value  = iLow(symbol,CONST_PERIOD,ewt_index);
+                            int ewt_index     = iLowest(Symbol(),CONST_PERIOD,MODE_LOW,CONST_EWT_PERIOD,current_bar);
+                            double ewt_value  = iLow(Symbol(),CONST_PERIOD,ewt_index);
                             if(ask <= ewt_value)
                             {
                               // we have reached the opposing EWT indicator line
@@ -1854,7 +1854,7 @@ void CheckTrade(Trade &trade)
                               
                               for(int tries = 0; tries < 100; tries++)
                               {
-                                result = OrderClose(OrderTicket(),OrderLots(),bid,3,Violet);
+                                bool result = OrderClose(OrderTicket(),OrderLots(),bid,3,Violet);
                                 if(result==true) 
                                 {
                                   break; 
