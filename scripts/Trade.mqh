@@ -61,7 +61,8 @@ public:
                TradeType ttype,  
                TradeOperation toperation,
                bool filled,
-               TradeState tstate
+               TradeState tstate,
+               double lastprice
             );
 
       ~Trade();
@@ -93,6 +94,7 @@ public:
       TradeOperation trade_operation;
       bool is_filled;
       TradeState trade_state;
+      double last_price;
 };
 //+------------------------------------------------------------------+
 //|                                                                  |
@@ -103,9 +105,9 @@ Trade::Trade()
     symbol              = "";
     open_price          = 0.0;
     datetime zerotime   = 0;
-    open_time           = __DATETIME__;
+    open_time           = zerotime;
     close_price         = 0.0;
-    close_time          = __DATETIME__;
+    close_time          = zerotime;
     volume              = 0.0;
     stoploss            = 0.0;
     take_profit         = 0.0;
@@ -113,12 +115,13 @@ Trade::Trade()
     swap                = 0.0;
     profit              = 0.0;
     magic_number        = 0.0;
-    expiration_date     = __DATETIME__;
+    expiration_date     = zerotime;
     comment             = "";
     trade_type          = TT_INVALID;
     trade_operation     = TO_INVALID;
     is_filled           = false;
     trade_state         = TS_INVALID;
+    last_price          = 0.0;
 
 }
 //+------------------------------------------------------------------+
@@ -143,7 +146,8 @@ Trade::Trade(
                 TradeType ttype,  
                 TradeOperation toperation,
                 bool filled,
-                TradeState tstate
+                TradeState tstate,
+                double lastprice
             )
 {
     ticket_number        = ticket_num;
@@ -165,6 +169,7 @@ Trade::Trade(
     trade_operation      = toperation;
     is_filled            = filled;
     trade_state          = tstate;
+    last_price           = lastprice;
 }
 //+------------------------------------------------------------------+
 //|                                                                  |
@@ -204,7 +209,7 @@ string Trade::AsString()
    string close_time_string = TimeToString(close_time,TIME_DATE|TIME_SECONDS);
    string expiration_date_string = TimeToString(open_time,TIME_DATE|TIME_SECONDS);
 
-   string str = StringFormat("%d,%s,%f,%s,%f,%s,%f,%f,%f,%f,%f,%f,%f,%s,%s,%s,%s,%s,%s\n",
+   string str = StringFormat("tnum=%d,symb=%s,oprice=%f,otime=%s,cprice=%f,ctime=%s,vol=%f,sl=%f,tp=%f,comm=%f,swp=%f,prft=%f,mnum=%f,exp=%s,cmnt=%s,ttype=%s,toper=%s,filled=%s,tstat=%s,lprice%f\n",
                             ticket_number,
                             symbol,
                             open_price,
@@ -223,7 +228,8 @@ string Trade::AsString()
                             ttype, 
                             toperation,
                             (is_filled ? "true":"false"),
-                            tstate
+                            tstate,
+                            last_price
                   );
    return str;  
 }
@@ -251,6 +257,7 @@ void Trade::Clear()
     trade_operation      = TO_INVALID;
     is_filled            = false;
     trade_state          = TS_INVALID;
+    last_price           = 0.0;
 }
 //+------------------------------------------------------------------+
 //|                                                                  |
@@ -276,6 +283,7 @@ void Trade::Copy(Trade &other)
     trade_operation      = other.trade_operation;
     is_filled            = other.is_filled;
     trade_state          = other.trade_state;
+    last_price           = other.last_price;
 }
 //+------------------------------------------------------------------+
 void Trade::SetTradeType(string str)
